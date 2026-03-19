@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tocadiscos</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app-container">
+
+  <!-- ===== TOCADISCOS ===== -->
+  <section class="turntable-section">
+    <div class="turntable-base" id="turntableBase">
+
+      <div class="brand-label">Vinylux</div>
+
+      <!-- Plato + disco -->
+      <div class="platter">
+        <div class="record" id="record">
+          <div class="label" id="label">
+            <div class="label-ring"></div>
+            <div class="label-text">
+              <span class="label-title" id="labelTitle">Vinylux</span>
+              <span class="label-artist" id="labelArtist">— — —</span>
+            </div>
+            <div class="spindle-hole"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Brazo con aguja -->
+      <div class="tonearm-assembly" id="tonearm">
+        <div class="tonearm-pivot"></div>
+        <div class="tonearm-rod">
+          <div class="headshell">
+            <div class="headshell-body"></div>
+            <div class="stylus"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Decoración -->
+      <div class="speed-label">33⅓ RPM</div>
+      <div class="power-led" id="powerLed"></div>
+
+    </div>
+  </section>
+
+  <!-- ===== CONTROLES ===== -->
+  <section class="controls-section">
+
+    <!-- Título -->
+    <div class="now-playing">
+      <div class="now-playing-label">Reproduciendo ahora</div>
+      <div class="track-title" id="trackTitle">Selecciona una canción</div>
+      <div class="track-artist" id="trackArtist">Agrega música para empezar</div>
+    </div>
+
+    <div class="separator"></div>
+
+    <!-- Barra de progreso -->
+    <div class="progress-container">
+      <span class="time-label" id="timeCurrent">0:00</span>
+      <div class="progress-bar" id="progressBar">
+        <div class="progress-fill" id="progressFill"></div>
+        <div class="progress-thumb" id="progressThumb"></div>
+      </div>
+      <span class="time-label right" id="timeTotal">0:00</span>
+    </div>
+
+    <!-- Botones de transporte -->
+    <div class="transport">
+      <button class="btn-transport btn-play" id="btnPlay" aria-label="Reproducir" title="Play/Pausa (Espacio)">
+        <svg id="iconPlay" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+        <svg id="iconPause" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="display:none">
+          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+        </svg>
+      </button>
+      <button class="btn-transport btn-prev" id="btnPrev" aria-label="Anterior" title="Anterior (P)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+        </svg>
+      </button>
+      <button class="btn-transport btn-next" id="btnNext" aria-label="Siguiente" title="Siguiente (N)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Volumen -->
+    <div class="volume-container">
+      <span class="vol-icon" id="volIcon" title="Silenciar">🔈</span>
+      <input type="range" class="vol-slider" id="volSlider" min="0" max="1" step="0.01" value="0.8">
+      <span class="vol-icon">🔊</span>
+    </div>
+
+    <div class="separator"></div>
+
+    <!-- Zona de carga -->
+    <div class="upload-zone" id="uploadZone" role="button" tabindex="0" aria-label="Agregar archivos de música">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 16V4m0 0l-4 4m4-4l4 4"/>
+        <path d="M4 20h16"/>
+      </svg>
+      <span>Arrastra archivos de audio aquí o haz clic para agregar</span>
+      <input type="file" id="fileInput" accept="audio/*" multiple style="display:none">
+    </div>
+
+    <!-- Playlist -->
+    <div class="playlist-label">Playlist</div>
+    <ul class="playlist" id="playlist">
+      <li class="playlist-empty" id="playlistEmpty">No hay canciones en la playlist</li>
+    </ul>
+
+  </section>
+</div>
+
+<audio id="audio" preload="metadata"></audio>
+
+<script>
+// ============================================================
+// ESTADO
+// ============================================================
+const state = {
+  isPlaying: false,
+  currentIndex: -1,
+  playlist: [],
+  volume: 0.8,
+  isDraggingProgress: false,
+  armState: 'parked',  // 'parked' | 'playing' | 'lifting'
+};
+
+// Colores para los labels del disco
+const LABEL_COLORS = [
+  '#8B2020', '#1a3a6c', '#2d5a1e', '#6c3a1a',
+  '#1a4a5c', '#5c1a4a', '#4a4a1a', '#1a4a3a',
+  '#6c4a1a', '#2a1a6c', '#5c2a1a', '#1a5c3a',
+];
+
+// Tracks de demo (CC0 / libres de derechos)
+const DEMO_TRACKS = [
+  {
+    title: 'SoundHelix Song 1',
+    artist: 'SoundHelix (Demo)',
+    color: LABEL_COLORS[0],
+    src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+    isDemo: true,
+  },
+  {
+    title: 'SoundHelix Song 2',
+    artist: 'SoundHelix (Demo)',
+    color: LABEL_COLORS[1],
+    src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
+    isDemo: true,
+  },
+  {
+    title: 'SoundHelix Song 3',
+    artist: 'SoundHelix (Demo)',
+    color: LABEL_COLORS[2],
+    src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
+    isDemo: true,
+  },
+];
+
+// ============================================================
+// REFERENCIAS AL DOM
+// ============================================================
+const audio         = document.getElementById('audio');
+const record        = document.getElementById('record');
+const label         = document.getElementById('label');
+const labelTitle    = document.getElementById('labelTitle');
+const labelArtist   = document.getElementById('labelArtist');
+const tonearm       = document.getElementById('tonearm');
+const powerLed      = document.getElementById('powerLed');
+const trackTitle    = document.getElementById('trackTitle');
+const trackArtist   = document.getElementById('trackArtist');
+const timeCurrent   = document.getElementById('timeCurrent');
+const timeTotal     = document.getElementById('timeTotal');
+const progressBar   = document.getElementById('progressBar');
+const progressFill  = document.getElementById('progressFill');
+const progressThumb = document.getElementById('progressThumb');
+const btnPlay       = document.getElementById('btnPlay');
+const iconPlay      = document.getElementById('iconPlay');
+const iconPause     = document.getElementById('iconPause');
+const btnPrev       = document.getElementById('btnPrev');
+const btnNext       = document.getElementById('btnNext');
+const volSlider     = document.getElementById('volSlider');
+const volIcon       = document.getElementById('volIcon');
+const uploadZone    = document.getElementById('uploadZone');
+const fileInput     = document.getElementById('fileInput');
+const playlistEl    = document.getElementById('playlist');
+const playlistEmpty = document.getElementById('playlistEmpty');
+
+// ============================================================
+// UTILIDADES
+// ============================================================
+function formatTime(sec) {
+  if (!isFinite(sec) || isNaN(sec)) return '0:00';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function parseFilename(filename) {
+  const name = filename.replace(/\.[^.]+$/, '');
+  const parts = name.split(/\s+-\s+/);
+  if (parts.length >= 2) {
+    return { artist: parts[0].trim(), title: parts.slice(1).join(' - ').trim() };
+  }
+  return { artist: 'Desconocido', title: name };
+}
+
+function getColor(index) {
+  return LABEL_COLORS[index % LABEL_COLORS.length];
+}
+
+// ============================================================
+// TONEARM — MÁQUINA DE ESTADOS
+// ============================================================
+let armLiftTimeout = null;
+
+function setArmAngle(angle, withTransition = true) {
+  if (!withTransition) {
+    tonearm.style.transition = 'none';
+    requestAnimationFrame(() => {
+      tonearm.style.setProperty('--arm-angle', angle + 'deg');
+      requestAnimationFrame(() => {
+        tonearm.style.transition = '';
+      });
+    });
+  } else {
+    tonearm.style.setProperty('--arm-angle', angle + 'deg');
+  }
+}
+
+function calcArmAngle() {
+  if (!audio.duration || !isFinite(audio.duration)) return -18;
+  const ratio = audio.currentTime / audio.duration;
+  return -18 + ratio * 22;   // -18deg (borde) → 4deg (centro)
+}
+
+function armToPlaying() {
+  clearTimeout(armLiftTimeout);
+  tonearm.classList.remove('lifting');
+  state.armState = 'playing';
+  const angle = calcArmAngle();
+  tonearm.style.transition = 'transform 1.1s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+  tonearm.style.setProperty('--arm-angle', angle + 'deg');
+}
+
+function armToPaused() {
+  if (state.armState === 'parked' || state.armState === 'lifting') return;
+  state.armState = 'lifting';
+  tonearm.classList.add('lifting');
+
+  armLiftTimeout = setTimeout(() => {
+    tonearm.classList.remove('lifting');
+    state.armState = 'parked';
+    tonearm.style.transition = 'transform 0.9s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+    tonearm.style.setProperty('--arm-angle', '28deg');
+  }, 380);
+}
+
+function updateTonearmAngle() {
+  if (state.armState !== 'playing') return;
+  const angle = calcArmAngle();
+  // Actualizar sin disparar la transición larga (usar transición corta para seguimiento suave)
+  tonearm.style.transition = 'transform 0.15s linear';
+  tonearm.style.setProperty('--arm-angle', angle + 'deg');
+}
+
+// ============================================================
+// AUDIO — CARGA Y REPRODUCCIÓN
+// ============================================================
+function loadTrack(index) {
+  if (index < 0 || index >= state.playlist.length) return;
+  const wasPlaying = state.isPlaying;
+
+  state.currentIndex = index;
+  const track = state.playlist[index];
+
+  audio.src = track.src;
+  audio.load();
+
+  // Actualizar UI del disco
+  label.style.setProperty('--label-color', track.color);
+  labelTitle.textContent = track.title;
+  labelArtist.textContent = track.artist;
+
+  // Actualizar panel
+  trackTitle.textContent = track.title;
+  trackArtist.textContent = track.artist;
+
+  // Reset barra
+  progressFill.style.width = '0%';
+  progressThumb.style.left = '0%';
+  timeCurrent.textContent = '0:00';
+  timeTotal.textContent = '0:00';
+
+  renderPlaylist();
+
+  if (wasPlaying) {
+    audio.play().catch(() => {});
+  }
+}
+
+function play() {
+  if (state.playlist.length === 0) return;
+  if (state.currentIndex === -1) loadTrack(0);
+
+  audio.play().then(() => {
+    state.isPlaying = true;
+    record.classList.add('playing');
+    powerLed.classList.add('on');
+    iconPlay.style.display = 'none';
+    iconPause.style.display = '';
+    armToPlaying();
+  }).catch(err => {
+    console.warn('No se pudo reproducir:', err);
+  });
+}
+
+function pause() {
+  audio.pause();
+  state.isPlaying = false;
+  record.classList.remove('playing');
+  powerLed.classList.remove('on');
+  iconPlay.style.display = '';
+  iconPause.style.display = 'none';
+  armToPaused();
+  updateEqBars(false);
+}
+
+function togglePlay() {
+  if (state.playlist.length === 0) {
+    uploadZone.classList.add('drag-over');
+    setTimeout(() => uploadZone.classList.remove('drag-over'), 600);
+    return;
+  }
+  if (state.isPlaying) {
+    pause();
+  } else {
+    play();
+  }
+}
+
+function nextTrack() {
+  if (state.playlist.length === 0) return;
+  const next = (state.currentIndex + 1) % state.playlist.length;
+  const wasPlaying = state.isPlaying;
+  pause();
+  loadTrack(next);
+  if (wasPlaying) setTimeout(() => play(), 300);
+}
+
+function prevTrack() {
+  if (state.playlist.length === 0) return;
+  // Si pasaron más de 3s, vuelve al inicio de la pista
+  if (audio.currentTime > 3) {
+    audio.currentTime = 0;
+    return;
+  }
+  const prev = (state.currentIndex - 1 + state.playlist.length) % state.playlist.length;
+  const wasPlaying = state.isPlaying;
+  pause();
+  loadTrack(prev);
+  if (wasPlaying) setTimeout(() => play(), 300);
+}
+
+function seekTo(ratio) {
+  if (!audio.duration || !isFinite(audio.duration)) return;
+  audio.currentTime = ratio * audio.duration;
+  updateProgress();
+}
+
+function setVolume(v) {
+  state.volume = Math.max(0, Math.min(1, v));
+  audio.volume = state.volume;
+  volSlider.value = state.volume;
+  volIcon.textContent = state.volume === 0 ? '🔇' : state.volume < 0.5 ? '🔈' : '🔊';
+}
+
+// ============================================================
+// UI — ACTUALIZACIONES
+// ============================================================
+function updateProgress() {
+  if (!audio.duration || !isFinite(audio.duration)) return;
+  const ratio = audio.currentTime / audio.duration;
+  const pct = (ratio * 100).toFixed(2) + '%';
+  progressFill.style.width = pct;
+  progressThumb.style.left = pct;
+  timeCurrent.textContent = formatTime(audio.currentTime);
+}
+
+function updateEqBars(playing) {
+  const bars = document.querySelectorAll('.eq-bar');
+  bars.forEach(b => {
+    if (playing) b.classList.add('animating');
+    else b.classList.remove('animating');
+  });
+}
+
+function renderPlaylist() {
+  // Mantener el empty message
+  const items = playlistEl.querySelectorAll('.playlist-item');
+  items.forEach(i => i.remove());
+
+  if (state.playlist.length === 0) {
+    playlistEmpty.style.display = '';
+    return;
+  }
+  playlistEmpty.style.display = 'none';
+
+  state.playlist.forEach((track, i) => {
+    const li = document.createElement('li');
+    li.className = 'playlist-item' + (i === state.currentIndex ? ' active' : '');
+    li.dataset.index = i;
+
+    const isActive = i === state.currentIndex;
+    li.innerHTML = `
+      <div class="pl-index">${isActive ? `
+        <div class="eq-bars">
+          <div class="eq-bar${state.isPlaying ? ' animating' : ''}"></div>
+          <div class="eq-bar${state.isPlaying ? ' animating' : ''}"></div>
+          <div class="eq-bar${state.isPlaying ? ' animating' : ''}"></div>
+        </div>` : (i + 1)}</div>
+      <div class="pl-info">
+        <div class="pl-title">${escapeHtml(track.title)}</div>
+        <div class="pl-artist">${escapeHtml(track.artist)}</div>
+      </div>
+      <button class="pl-remove" data-index="${i}" aria-label="Eliminar" title="Eliminar">✕</button>
+    `;
+
+    li.addEventListener('click', (e) => {
+      if (e.target.closest('.pl-remove')) return;
+      const idx = parseInt(li.dataset.index);
+      if (idx === state.currentIndex) {
+        togglePlay();
+      } else {
+        const wasPlaying = state.isPlaying;
+        pause();
+        loadTrack(idx);
+        if (wasPlaying) setTimeout(() => play(), 300);
+        else play();
+      }
+    });
+
+    li.querySelector('.pl-remove').addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeTrack(parseInt(e.currentTarget.dataset.index));
+    });
+
+    playlistEl.appendChild(li);
+  });
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ============================================================
+// GESTIÓN DE TRACKS
+// ============================================================
+function addTrack(track) {
+  state.playlist.push(track);
+  renderPlaylist();
+
+  // Si es el primero, cargarlo
+  if (state.playlist.length === 1) {
+    loadTrack(0);
+  }
+}
+
+function removeTrack(index) {
+  const track = state.playlist[index];
+
+  // Revocar Object URL si es local
+  if (track.objectURL) {
+    URL.revokeObjectURL(track.objectURL);
+  }
+
+  state.playlist.splice(index, 1);
+
+  if (state.playlist.length === 0) {
+    // Sin canciones
+    if (state.isPlaying) pause();
+    state.currentIndex = -1;
+    audio.src = '';
+    trackTitle.textContent = 'Selecciona una canción';
+    trackArtist.textContent = 'Agrega música para empezar';
+    labelTitle.textContent = 'Vinylux';
+    labelArtist.textContent = '— — —';
+    timeCurrent.textContent = '0:00';
+    timeTotal.textContent = '0:00';
+    progressFill.style.width = '0%';
+    progressThumb.style.left = '0%';
+    renderPlaylist();
+    return;
+  }
+
+  // Ajustar el índice actual
+  if (index < state.currentIndex) {
+    state.currentIndex--;
+  } else if (index === state.currentIndex) {
+    const wasPlaying = state.isPlaying;
+    pause();
+    const newIndex = Math.min(state.currentIndex, state.playlist.length - 1);
+    state.currentIndex = -1; // forzar recarga
+    loadTrack(newIndex);
+    if (wasPlaying) setTimeout(() => play(), 300);
+    return;
+  }
+
+  renderPlaylist();
+}
+
+// ============================================================
+// CARGA DE ARCHIVOS
+// ============================================================
+function handleFiles(files) {
+  const audioFiles = Array.from(files).filter(f => f.type.startsWith('audio/') || /\.(mp3|flac|wav|ogg|aac|m4a|opus)$/i.test(f.name));
+
+  audioFiles.forEach((file, i) => {
+    const objectURL = URL.createObjectURL(file);
+    const { title, artist } = parseFilename(file.name);
+    const colorIndex = (state.playlist.length + i) % LABEL_COLORS.length;
+    addTrack({
+      title,
+      artist,
+      color: LABEL_COLORS[colorIndex],
+      src: objectURL,
+      objectURL,
+    });
+  });
+
+  if (audioFiles.length > 0 && !state.isPlaying) {
+    // Cargar la primera pista nueva si no estaba reproduciendo nada
+    play();
+  }
+}
+
+// ============================================================
+// EVENTOS DE AUDIO
+// ============================================================
+audio.addEventListener('timeupdate', () => {
+  if (!state.isDraggingProgress) updateProgress();
+  if (state.isPlaying) updateTonearmAngle();
+});
+
+audio.addEventListener('loadedmetadata', () => {
+  timeTotal.textContent = formatTime(audio.duration);
+});
+
+audio.addEventListener('play', () => {
+  // Por si autoplay resolvió
+  state.isPlaying = true;
+  record.classList.add('playing');
+  powerLed.classList.add('on');
+  iconPlay.style.display = 'none';
+  iconPause.style.display = '';
+  updateEqBars(true);
+});
+
+audio.addEventListener('pause', () => {
+  updateEqBars(false);
+});
+
+audio.addEventListener('ended', () => {
+  nextTrack();
+});
+
+audio.addEventListener('error', () => {
+  const track = state.playlist[state.currentIndex];
+  if (track && track.isDemo) {
+    // Demo track falló (sin conexión) — pasar al siguiente
+    console.warn('Demo track falló, pasando al siguiente...');
+    if (state.currentIndex < state.playlist.length - 1) {
+      nextTrack();
+    } else {
+      pause();
+    }
+  }
+});
+
+// ============================================================
+// BARRA DE PROGRESO — DRAG
+// ============================================================
+let isDragging = false;
+
+function getProgressRatio(e) {
+  const rect = progressBar.getBoundingClientRect();
+  return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+}
+
+progressBar.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  state.isDraggingProgress = true;
+  const ratio = getProgressRatio(e);
+  progressFill.style.width = (ratio * 100) + '%';
+  progressThumb.style.left = (ratio * 100) + '%';
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  const ratio = getProgressRatio(e);
+  progressFill.style.width = (ratio * 100) + '%';
+  progressThumb.style.left = (ratio * 100) + '%';
+  timeCurrent.textContent = formatTime(ratio * (audio.duration || 0));
+});
+
+document.addEventListener('mouseup', (e) => {
+  if (!isDragging) return;
+  isDragging = false;
+  state.isDraggingProgress = false;
+  const ratio = getProgressRatio(e);
+  seekTo(ratio);
+});
+
+// Touch support para móvil
+progressBar.addEventListener('touchstart', (e) => {
+  isDragging = true;
+  state.isDraggingProgress = true;
+});
+
+document.addEventListener('touchmove', (e) => {
+  if (!isDragging) return;
+  const ratio = getProgressRatio(e.touches[0]);
+  progressFill.style.width = (ratio * 100) + '%';
+  progressThumb.style.left = (ratio * 100) + '%';
+  timeCurrent.textContent = formatTime(ratio * (audio.duration || 0));
+}, { passive: true });
+
+document.addEventListener('touchend', (e) => {
+  if (!isDragging) return;
+  isDragging = false;
+  state.isDraggingProgress = false;
+  const ratio = parseFloat(progressFill.style.width) / 100;
+  seekTo(ratio);
+});
+
+// ============================================================
+// CONTROLES
+// ============================================================
+btnPlay.addEventListener('click', togglePlay);
+btnPrev.addEventListener('click', prevTrack);
+btnNext.addEventListener('click', nextTrack);
+
+volSlider.addEventListener('input', (e) => setVolume(parseFloat(e.target.value)));
+volIcon.addEventListener('click', () => {
+  if (audio.volume > 0) {
+    audio._prevVolume = audio.volume;
+    setVolume(0);
+  } else {
+    setVolume(audio._prevVolume || 0.8);
+  }
+});
+
+// ============================================================
+// CARGA DE ARCHIVOS — EVENTOS
+// ============================================================
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+
+fileInput.addEventListener('change', (e) => {
+  handleFiles(e.target.files);
+  fileInput.value = '';
+});
+
+// Drag & drop en zona de carga
+uploadZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  uploadZone.classList.add('drag-over');
+});
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  handleFiles(e.dataTransfer.files);
+});
+
+// Drag & drop también sobre el tocadiscos
+const turntableBase = document.getElementById('turntableBase');
+turntableBase.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  turntableBase.style.outline = '2px dashed rgba(232,160,32,0.5)';
+  turntableBase.style.outlineOffset = '-4px';
+});
+turntableBase.addEventListener('dragleave', () => {
+  turntableBase.style.outline = '';
+});
+turntableBase.addEventListener('drop', (e) => {
+  e.preventDefault();
+  turntableBase.style.outline = '';
+  handleFiles(e.dataTransfer.files);
+});
+
+// ============================================================
+// ATAJOS DE TECLADO
+// ============================================================
+document.addEventListener('keydown', (e) => {
+  // No disparar si el foco está en un input
+  if (e.target.tagName === 'INPUT') return;
+
+  switch (e.key) {
+    case ' ':
+      e.preventDefault();
+      togglePlay();
+      break;
+    case 'ArrowLeft':
+      e.preventDefault();
+      audio.currentTime = Math.max(0, audio.currentTime - 10);
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 10);
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      setVolume(state.volume + 0.05);
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      setVolume(state.volume - 0.05);
+      break;
+    case 'n': case 'N':
+      nextTrack();
+      break;
+    case 'p': case 'P':
+      prevTrack();
+      break;
+  }
+});
+
+// ============================================================
+// INICIALIZACIÓN
+// ============================================================
+function init() {
+  audio.volume = state.volume;
+  setArmAngle(28, false);
+
+  // Cargar demo tracks
+  DEMO_TRACKS.forEach((track, i) => {
+    state.playlist.push(track);
+  });
+
+  if (state.playlist.length > 0) {
+    loadTrack(0);
+  }
+
+  renderPlaylist();
+}
+
+init();
+</script>
+</body>
+</html>
