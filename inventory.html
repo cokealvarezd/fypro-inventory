@@ -126,6 +126,56 @@
       transition: all var(--transition);
     }
     .sidebar-footer button:hover { background: rgba(255,255,255,.12); color: rgba(255,255,255,.8); }
+    .sheets-badge {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #22c55e; margin-left: auto; flex-shrink: 0;
+    }
+    .sheets-badge.hidden { display: none; }
+    .sheets-badge.error { background: var(--danger); }
+
+    /* ===== SHEETS CONFIG SECTION ===== */
+    .config-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 28px 32px; margin-bottom: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .config-card h3 { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
+    .config-card p { font-size: .875rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6; }
+    .config-steps { counter-reset: step; list-style: none; margin-bottom: 24px; }
+    .config-steps li {
+      counter-increment: step; display: flex; gap: 14px; align-items: flex-start;
+      padding: 10px 0; border-bottom: 1px solid var(--border); font-size: .875rem;
+    }
+    .config-steps li:last-child { border-bottom: none; }
+    .config-steps li::before {
+      content: counter(step); min-width: 24px; height: 24px;
+      background: var(--primary); color: #fff; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .72rem; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+    }
+    .config-steps code {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 2px 6px; font-size: .8rem; font-family: monospace;
+    }
+    .config-url-row { display: flex; gap: 10px; align-items: flex-end; }
+    .config-url-row .form-group { flex: 1; margin: 0; }
+    .sync-status {
+      display: flex; align-items: center; gap: 8px; margin-top: 12px;
+      font-size: .8rem; color: var(--text-muted); min-height: 20px;
+    }
+    .sync-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); flex-shrink: 0;
+    }
+    .sync-dot.ok { background: var(--success); }
+    .sync-dot.error { background: var(--danger); }
+    .sync-dot.syncing { background: var(--warning); animation: pulse .8s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .script-box {
+      background: #1e293b; border-radius: var(--radius); padding: 16px 20px;
+      font-family: monospace; font-size: .76rem; color: #e2e8f0; line-height: 1.7;
+      overflow-x: auto; margin: 12px 0; white-space: pre;
+    }
+    .copy-btn { font-size: .75rem; }
 
     /* ===== MAIN CONTENT ===== */
     .main { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; }
@@ -620,6 +670,11 @@
         <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 3a1 1 0 00-1 1v1a1 1 0 001 1h16a1 1 0 001-1V4a1 1 0 00-1-1H2zm0 4.5h16l-1.68 10.09A2 2 0 0114.33 19H5.67a2 2 0 01-1.97-1.41L2 7.5z"/></svg>
         Catálogo de Productos
       </button>
+      <button class="nav-btn" data-vista="configuracion" id="navSheets">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 003 3.5v13A1.5 1.5 0 004.5 18h11a1.5 1.5 0 001.5-1.5V7.621a1.5 1.5 0 00-.44-1.06l-4.12-4.122A1.5 1.5 0 0011.378 2H4.5zm4.75 6.75a.75.75 0 011.5 0v2h2a.75.75 0 010 1.5h-2v2a.75.75 0 01-1.5 0v-2h-2a.75.75 0 010-1.5h2v-2z" clip-rule="evenodd"/></svg>
+        Google Sheets
+        <span id="sheetsBadge" class="sheets-badge hidden"></span>
+      </button>
     </nav>
     <div class="sidebar-footer">
       <button onclick="exportarDatos()" title="Exportar datos">Exportar</button>
@@ -854,6 +909,83 @@
       </div>
     </section>
 
+
+    <!-- ===== CONFIGURACIÓN GOOGLE SHEETS ===== -->
+    <section id="sec-configuracion" class="inv-section hidden">
+      <div class="page-header" style="padding:32px 0 24px">
+        <div>
+          <div class="page-title">Google Sheets</div>
+          <div class="page-subtitle">Sincronización automática de movimientos</div>
+        </div>
+      </div>
+
+      <div class="config-card">
+        <h3>Configurar sincronización</h3>
+        <p>Cada vez que registres una compra o venta, los datos se enviarán automáticamente a tu hoja de Google Sheets. Para activarlo, debes crear un script en tu planilla siguiendo estos pasos:</p>
+
+        <ol class="config-steps">
+          <li>Abre tu hoja de Google Sheets y ve a <strong>Extensiones → Apps Script</strong>.</li>
+          <li>Borra el código que aparece y pega el siguiente script (botón Copiar abajo).</li>
+          <li>Guarda con <code>Ctrl+S</code>, luego haz clic en <strong>Implementar → Nueva implementación</strong>.</li>
+          <li>Tipo: <strong>Aplicación web</strong>. Ejecutar como: <strong>Yo</strong>. Acceso: <strong>Cualquier usuario</strong>. Haz clic en <strong>Implementar</strong>.</li>
+          <li>Autoriza los permisos y copia la <strong>URL de la aplicación web</strong> que te entrega Google.</li>
+          <li>Pega esa URL en el campo de abajo y guarda.</li>
+        </ol>
+
+        <div style="margin-bottom:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-size:.8rem;font-weight:600;color:var(--text-muted)">SCRIPT PARA APPS SCRIPT</span>
+            <button class="btn btn-secondary copy-btn" onclick="copiarScript()">Copiar script</button>
+          </div>
+          <div class="script-box" id="scriptBox">function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheets = ss.getSheets();
+    var sheet = null;
+    for (var i = 0; i &lt; sheets.length; i++) {
+      if (sheets[i].getSheetId() === 1498017827) { sheet = sheets[i]; break; }
+    }
+    if (!sheet) sheet = ss.getActiveSheet();
+    data.items.forEach(function(item) {
+      sheet.appendRow([
+        data.fecha, data.tipo, data.ubicacion,
+        item.marca, item.nombre, item.cantidad,
+        data.comentario, data.id
+      ]);
+    });
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true }))
+    .setMimeType(ContentService.MimeType.JSON);
+}</div>
+        </div>
+
+        <div class="config-url-row">
+          <div class="form-group">
+            <label class="form-label">URL de la aplicación web (Apps Script)</label>
+            <input type="url" id="sheetsUrl" class="form-control" placeholder="https://script.google.com/macros/s/.../exec">
+          </div>
+          <button class="btn btn-primary" onclick="guardarUrlSheets()" style="white-space:nowrap">Guardar URL</button>
+          <button class="btn btn-secondary" onclick="probarConexion()" style="white-space:nowrap">Probar</button>
+        </div>
+        <div class="sync-status">
+          <div class="sync-dot" id="syncDot"></div>
+          <span id="syncMsg">Sin configurar</span>
+        </div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -1077,6 +1209,7 @@ function renderVista(vista) {
   else if (vista === 'productos') renderTablaProductos();
   else if (vista === 'movimiento') renderFormMovimiento();
   else if (vista === 'historial') renderHistorial();
+  else if (vista === 'configuracion') renderConfiguracion();
 }
 
 function toggleSidebar() {
@@ -1386,6 +1519,7 @@ function guardarMovimiento() {
 
   state.movimientos.unshift(mov);
   guardarDatos();
+  enviarASheets(mov);
   resetFormMov();
   renderFormMovimiento();
 
@@ -1642,6 +1776,114 @@ function init() {
 }
 
 init();
+
+// ======================== GOOGLE SHEETS SYNC ========================
+const SHEETS_URL_KEY = 'inv_sheets_url';
+
+function getUrlSheets() {
+  return localStorage.getItem(SHEETS_URL_KEY) || '';
+}
+
+function actualizarEstadoSync() {
+  const url = getUrlSheets();
+  const dot = document.getElementById('syncDot');
+  const msg = document.getElementById('syncMsg');
+  const badge = document.getElementById('sheetsBadge');
+  if (!dot || !msg) return;
+  if (!url) {
+    dot.className = 'sync-dot';
+    msg.textContent = 'Sin configurar';
+    if (badge) { badge.className = 'sheets-badge hidden'; }
+  } else {
+    dot.className = 'sync-dot ok';
+    msg.textContent = 'URL configurada — los movimientos se sincronizarán automáticamente';
+    if (badge) { badge.className = 'sheets-badge'; }
+  }
+}
+
+function renderConfiguracion() {
+  const url = getUrlSheets();
+  const input = document.getElementById('sheetsUrl');
+  if (input && url) input.value = url;
+  actualizarEstadoSync();
+}
+
+function guardarUrlSheets() {
+  const url = document.getElementById('sheetsUrl').value.trim();
+  if (url && !url.startsWith('https://script.google.com/macros/s/')) {
+    toast('La URL no parece válida. Debe empezar con https://script.google.com/macros/s/', 'error');
+    return;
+  }
+  localStorage.setItem(SHEETS_URL_KEY, url);
+  actualizarEstadoSync();
+  toast(url ? 'URL guardada correctamente' : 'URL eliminada', 'success');
+}
+
+async function probarConexion() {
+  const url = getUrlSheets();
+  if (!url) { toast('Primero guarda una URL', 'error'); return; }
+  const dot = document.getElementById('syncDot');
+  const msg = document.getElementById('syncMsg');
+  dot.className = 'sync-dot syncing';
+  msg.textContent = 'Probando conexión…';
+  try {
+    const resp = await fetch(url, { redirect: 'follow' });
+    const json = await resp.json();
+    if (json.ok !== false) {
+      dot.className = 'sync-dot ok';
+      msg.textContent = 'Conexión exitosa ✓';
+      toast('Conexión con Google Sheets exitosa', 'success');
+    } else {
+      throw new Error(json.error || 'Respuesta inesperada');
+    }
+  } catch (err) {
+    dot.className = 'sync-dot error';
+    msg.textContent = 'Error de conexión — revisa la URL y los permisos del script';
+    toast('No se pudo conectar con Google Sheets', 'error');
+  }
+}
+
+function copiarScript() {
+  const box = document.getElementById('scriptBox');
+  const text = box.textContent.replace(/&lt;/g, '<').replace(/&amp;/g, '&');
+  navigator.clipboard.writeText(text).then(() => {
+    toast('Script copiado al portapapeles', 'success');
+  }).catch(() => {
+    toast('No se pudo copiar — selecciona el texto manualmente', 'error');
+  });
+}
+
+function enviarASheets(mov) {
+  const url = getUrlSheets();
+  if (!url) return;
+
+  const items = mov.items.map(it => {
+    const prod = state.productos.find(p => p.id === it.productoId);
+    return {
+      marca:    prod ? prod.marca  : '(eliminado)',
+      nombre:   prod ? prod.nombre : '(eliminado)',
+      cantidad: it.cantidad
+    };
+  });
+
+  const payload = JSON.stringify({
+    id:         mov.id,
+    fecha:      mov.fecha,
+    tipo:       mov.tipo,
+    ubicacion:  mov.ubicacion,
+    comentario: mov.comentario || '',
+    items
+  });
+
+  fetch(url, {
+    method:   'POST',
+    headers:  { 'Content-Type': 'text/plain;charset=utf-8' },
+    body:     payload,
+    redirect: 'follow'
+  }).catch(err => {
+    console.warn('Sheets sync error:', err);
+  });
+}
 </script>
 </body>
 </html>
