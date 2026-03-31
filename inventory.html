@@ -6,6 +6,9 @@
   <title>Inventario · FYPRO</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
   <style>
     /* ===== DESIGN TOKENS ===== */
     :root {
@@ -126,6 +129,14 @@
       transition: all var(--transition);
     }
     .sidebar-footer button:hover { background: rgba(255,255,255,.12); color: rgba(255,255,255,.8); }
+    .db-status {
+      display: flex; align-items: center; gap: 6px;
+      margin-top: 8px; font-size: .7rem; color: rgba(255,255,255,.4);
+    }
+    .db-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: #f59e0b;
+      flex-shrink: 0; transition: background .4s;
+    }
     .sheets-badge {
       width: 8px; height: 8px; border-radius: 50%;
       background: #22c55e; margin-left: auto; flex-shrink: 0;
@@ -650,6 +661,10 @@
     <div class="sidebar-brand">
       <h1>FYPRO</h1>
       <p>Sistema de Inventario</p>
+      <div class="db-status">
+        <span class="db-dot" id="dbStatusDot"></span>
+        <span id="dbStatusTxt">Conectando...</span>
+      </div>
     </div>
     <nav class="sidebar-nav">
       <div class="nav-label">Principal</div>
@@ -1089,15 +1104,11 @@ let formMov = {
 
 // ======================== PERSISTENCE ========================
 function guardarDatos() {
-  localStorage.setItem('inv_productos', JSON.stringify(state.productos));
-  localStorage.setItem('inv_movimientos', JSON.stringify(state.movimientos));
+  // Persistencia gestionada por Firestore
 }
 
 function cargarDatos() {
-  const p = localStorage.getItem('inv_productos');
-  const m = localStorage.getItem('inv_movimientos');
-  state.productos = p ? JSON.parse(p) : [];
-  state.movimientos = m ? JSON.parse(m) : [];
+  // Carga gestionada por Firestore via onSnapshot
 }
 
 function exportarDatos() {
@@ -1121,11 +1132,13 @@ function importarDatos(input) {
       const data = JSON.parse(e.target.result);
       if (!data.productos || !data.movimientos) throw new Error('Formato inválido');
       if (!confirm(`¿Importar datos? Esto reemplazará ${state.productos.length} productos y ${state.movimientos.length} movimientos actuales.`)) return;
-      state.productos = data.productos;
-      state.movimientos = data.movimientos;
-      guardarDatos();
-      renderVista(state.vistaActual);
-      toast('Datos importados correctamente', 'success');
+      if (!db) { toast('Error: base de datos no conectada', 'error'); return; }
+      const batch = db.batch();
+      data.productos.forEach(p => batch.set(db.collection('productos').doc(p.id), p));
+      data.movimientos.forEach(m => batch.set(db.collection('movimientos').doc(m.id), m));
+      batch.commit()
+        .then(() => toast('Datos importados correctamente', 'success'))
+        .catch(() => toast('Error al importar a la base de datos', 'error'));
     } catch {
       toast('Error al importar: archivo inválido', 'error');
     }
@@ -1374,15 +1387,18 @@ function guardarProducto() {
     activo: true
   };
 
+  if (db) {
+    db.collection('productos').doc(prod.id).set(prod)
+      .catch(() => toast('Error al guardar en la base de datos', 'error'));
+  }
   if (id) {
     const idx = state.productos.findIndex(p => p.id === id);
-    state.productos[idx] = prod;
+    if (idx >= 0) state.productos[idx] = prod;
     toast('Producto actualizado', 'success');
   } else {
     state.productos.push(prod);
     toast('Producto agregado', 'success');
   }
-  guardarDatos();
   renderTablaProductos();
   cerrarModal();
 }
@@ -1393,7 +1409,10 @@ function eliminarProducto(id) {
   if (!confirm(`¿Eliminar "${p.marca} ${p.nombre}"? El historial de movimientos se conservará.`)) return;
   const idx = state.productos.findIndex(x => x.id === id);
   state.productos[idx].activo = false;
-  guardarDatos();
+  if (db) {
+    db.collection('productos').doc(id).update({ activo: false })
+      .catch(() => toast('Error al eliminar en la base de datos', 'error'));
+  }
   renderTablaProductos();
   toast('Producto eliminado', 'success');
 }
@@ -1518,7 +1537,10 @@ function guardarMovimiento() {
   };
 
   state.movimientos.unshift(mov);
-  guardarDatos();
+  if (db) {
+    db.collection('movimientos').doc(mov.id).set(mov)
+      .catch(() => toast('Error al guardar movimiento en la base de datos', 'error'));
+  }
   enviarASheets(mov);
   resetFormMov();
   renderFormMovimiento();
@@ -1731,12 +1753,16 @@ function cargarDatosEjemplo() {
     },
   ];
 
-  state.productos = prods;
-  state.movimientos = movs;
-  guardarDatos();
-  cerrarWelcome();
-  renderDashboard();
-  toast('Datos iniciales cargados desde Excel ✓', 'success');
+  if (!db) { toast('Error: base de datos no conectada', 'error'); return; }
+  const batch = db.batch();
+  prods.forEach(p => batch.set(db.collection('productos').doc(p.id), p));
+  movs.forEach(m => batch.set(db.collection('movimientos').doc(m.id), m));
+  batch.commit()
+    .then(() => {
+      cerrarWelcome();
+      toast('Datos iniciales cargados desde Excel ✓', 'success');
+    })
+    .catch(err => toast('Error al cargar datos: ' + err.message, 'error'));
 }
 
 // ======================== EVENT LISTENERS ========================
@@ -1767,15 +1793,75 @@ document.addEventListener('keydown', e => {
 
 // ======================== INIT ========================
 function init() {
-  cargarDatos();
   resetFormMov();
-  if (state.productos.length === 0 && state.movimientos.length === 0) {
-    cargarDatosEjemplo();
-  }
-  renderDashboard();
+  initFirestore();
 }
 
 init();
+
+// ======================== FIRESTORE ========================
+let db = null;
+
+function setDbStatus(status) {
+  const dot = document.getElementById('dbStatusDot');
+  const txt = document.getElementById('dbStatusTxt');
+  if (!dot) return;
+  const cfg = {
+    connecting: ['#f59e0b', 'Conectando...'],
+    connected:  ['#22c55e', 'Sincronizado'],
+    error:      ['#ef4444', 'Sin conexión']
+  };
+  const [color, label] = cfg[status] || cfg.connecting;
+  dot.style.background = color;
+  if (txt) txt.textContent = label;
+}
+
+function initFirestore() {
+  const firebaseConfig = {
+    apiKey: "AIzaSyAqpTKXmEElzToGHrb7yxZlmGBzrQuTppQ",
+    authDomain: "fypro-inventory.firebaseapp.com",
+    projectId: "fypro-inventory",
+    storageBucket: "fypro-inventory.firebasestorage.app",
+    messagingSenderId: "565439534984",
+    appId: "1:565439534984:web:66ebfb7486163940130c3d"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+
+  // Persistencia offline (funciona aunque se pierda internet)
+  db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+    console.warn('Offline persistence:', err.code);
+  });
+
+  setDbStatus('connecting');
+
+  let prodOk = false, movOk = false, primeraVez = true;
+
+  function onListenerReady() {
+    if (!prodOk || !movOk) return;
+    setDbStatus('connected');
+    if (primeraVez) {
+      primeraVez = false;
+      const hayDatos = state.productos.some(p => p.activo) || state.movimientos.length > 0;
+      if (!hayDatos) mostrarWelcome(); else cerrarWelcome();
+    }
+    renderVista(state.vistaActual);
+  }
+
+  db.collection('productos').onSnapshot(snap => {
+    state.productos = snap.docs.map(d => d.data());
+    prodOk = true;
+    onListenerReady();
+  }, () => setDbStatus('error'));
+
+  db.collection('movimientos').onSnapshot(snap => {
+    state.movimientos = snap.docs.map(d => d.data());
+    state.movimientos.sort((a, b) => (b.creadoEn || 0) - (a.creadoEn || 0));
+    movOk = true;
+    onListenerReady();
+  }, () => setDbStatus('error'));
+}
 
 // ======================== GOOGLE SHEETS SYNC ========================
 const SHEETS_URL_KEY = 'inv_sheets_url';
