@@ -1088,6 +1088,8 @@ function doGet(e) {
 
 <script>
 // ======================== STATE ========================
+let db = null; // Firestore instance — declarado aquí para evitar TDZ
+
 const state = {
   productos: [],
   movimientos: [],
@@ -1800,8 +1802,6 @@ function init() {
 init();
 
 // ======================== FIRESTORE ========================
-let db = null;
-
 function setDbStatus(status) {
   const dot = document.getElementById('dbStatusDot');
   const txt = document.getElementById('dbStatusTxt');
