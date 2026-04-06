@@ -364,10 +364,12 @@
       font-weight: 600;
       letter-spacing: .02em;
     }
-    .badge-compra { background: var(--success-bg); color: var(--success); border: 1px solid #bbf7d0; }
-    .badge-venta  { background: var(--danger-bg);  color: var(--danger);  border: 1px solid #fecaca; }
+    .badge-compra    { background: var(--success-bg); color: var(--success); border: 1px solid #bbf7d0; }
+    .badge-venta     { background: var(--danger-bg);  color: var(--danger);  border: 1px solid #fecaca; }
+    .badge-traslado  { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
     .badge-principal { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
     .badge-tinyshop  { background: #fdf4ff; color: #9333ea; border: 1px solid #e9d5ff; }
+    .badge-ruta { display:inline-flex; align-items:center; gap:4px; font-size:.75rem; font-weight:500; }
     .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
     .stock-zero { color: var(--danger); font-weight: 700; }
     .stock-low  { color: var(--warning); font-weight: 600; }
@@ -411,10 +413,13 @@
     }
     .seg-btn:hover { color: var(--text); }
     .seg-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
-    .seg-btn.compra.active { background: var(--success); color: #fff; }
-    .seg-btn.venta.active { background: var(--danger); color: #fff; }
+    .seg-btn.compra.active   { background: var(--success); color: #fff; }
+    .seg-btn.venta.active    { background: var(--danger);  color: #fff; }
+    .seg-btn.traslado.active { background: #c2410c; color: #fff; }
     .seg-btn.principal.active { background: #2563eb; color: #fff; }
-    .seg-btn.tinyshop.active { background: #9333ea; color: #fff; }
+    .seg-btn.tinyshop.active  { background: #9333ea; color: #fff; }
+    .destino-row { display:none; margin-bottom:16px; }
+    .destino-row.visible { display:flex; gap:16px; }
 
     /* ===== MOVEMENT ITEMS ===== */
     .items-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
@@ -772,7 +777,7 @@
       <div class="page-header" style="padding:32px 0 24px">
         <div>
           <div class="page-title">Registrar Movimiento</div>
-          <div class="page-subtitle">Compras (entrada) y ventas (salida) de inventario</div>
+          <div class="page-subtitle">Compras, ventas y traslados entre tiendas</div>
         </div>
       </div>
 
@@ -786,13 +791,24 @@
                 <div class="segmented" id="tipoSegmented">
                   <button type="button" class="seg-btn compra active" data-tipo="COMPRA">Compra</button>
                   <button type="button" class="seg-btn venta" data-tipo="VENTA">Venta</button>
+                  <button type="button" class="seg-btn traslado" data-tipo="TRASLADO">Traslado</button>
                 </div>
               </div>
               <div class="form-group" style="margin-bottom:0">
-                <div class="form-label">Ubicación <span>*</span></div>
+                <div class="form-label" id="ubicLabel">Ubicación <span>*</span></div>
                 <div class="segmented" id="ubicSegmented">
                   <button type="button" class="seg-btn principal active" data-ubic="PRINCIPAL">Principal</button>
                   <button type="button" class="seg-btn tinyshop" data-ubic="TINYSHOP">TinyShop</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="destino-row" id="destinoRow">
+              <div class="form-group" style="margin-bottom:0;flex:1">
+                <div class="form-label">Destino <span>*</span></div>
+                <div class="segmented" id="destinoSegmented">
+                  <button type="button" class="seg-btn principal" data-ubic="PRINCIPAL">Principal</button>
+                  <button type="button" class="seg-btn tinyshop active" data-ubic="TINYSHOP">TinyShop</button>
                 </div>
               </div>
             </div>
@@ -843,6 +859,7 @@
               <option value="">Todos</option>
               <option value="COMPRA">Compra</option>
               <option value="VENTA">Venta</option>
+              <option value="TRASLADO">Traslado</option>
             </select>
           </div>
           <div class="filter-group">
@@ -1099,6 +1116,7 @@ const state = {
 let formMov = {
   tipo: 'COMPRA',
   ubicacion: 'PRINCIPAL',
+  ubicacionDestino: 'TINYSHOP',
   fecha: '',
   comentario: '',
   items: []
@@ -1196,10 +1214,15 @@ function computeStock() {
     stock[prod.id] = { PRINCIPAL: 0, TINYSHOP: 0 };
   }
   for (const mov of state.movimientos) {
-    const delta = mov.tipo === 'COMPRA' ? 1 : -1;
     for (const item of mov.items) {
       if (!stock[item.productoId]) stock[item.productoId] = { PRINCIPAL: 0, TINYSHOP: 0 };
-      stock[item.productoId][mov.ubicacion] = (stock[item.productoId][mov.ubicacion] || 0) + delta * item.cantidad;
+      if (mov.tipo === 'TRASLADO') {
+        stock[item.productoId][mov.ubicacion]         = (stock[item.productoId][mov.ubicacion]         || 0) - item.cantidad;
+        stock[item.productoId][mov.ubicacionDestino]  = (stock[item.productoId][mov.ubicacionDestino]  || 0) + item.cantidad;
+      } else {
+        const delta = mov.tipo === 'COMPRA' ? 1 : -1;
+        stock[item.productoId][mov.ubicacion] = (stock[item.productoId][mov.ubicacion] || 0) + delta * item.cantidad;
+      }
     }
   }
   return stock;
@@ -1423,6 +1446,7 @@ function eliminarProducto(id) {
 function resetFormMov() {
   formMov.tipo = 'COMPRA';
   formMov.ubicacion = 'PRINCIPAL';
+  formMov.ubicacionDestino = 'TINYSHOP';
   formMov.fecha = hoy();
   formMov.comentario = '';
   formMov.items = [{ productoId: '', cantidad: 1 }];
@@ -1442,6 +1466,17 @@ function renderFormMovimiento() {
   document.querySelectorAll('#ubicSegmented .seg-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.ubic === formMov.ubicacion);
   });
+  // Destino buttons
+  document.querySelectorAll('#destinoSegmented .seg-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.ubic === formMov.ubicacionDestino);
+  });
+
+  // Mostrar/ocultar fila destino y cambiar label origen
+  const esTraslado = formMov.tipo === 'TRASLADO';
+  document.getElementById('destinoRow').classList.toggle('visible', esTraslado);
+  document.getElementById('ubicLabel').innerHTML = esTraslado
+    ? 'Origen <span>*</span>'
+    : 'Ubicación <span>*</span>';
 
   // Items
   const list = document.getElementById('itemsList');
@@ -1532,6 +1567,7 @@ function guardarMovimiento() {
     id: generarId('mov'),
     tipo: formMov.tipo,
     ubicacion: formMov.ubicacion,
+    ...(formMov.tipo === 'TRASLADO' && { ubicacionDestino: formMov.ubicacionDestino }),
     fecha: formMov.fecha || hoy(),
     comentario: formMov.comentario,
     items: validItems,
@@ -1547,8 +1583,8 @@ function guardarMovimiento() {
   resetFormMov();
   renderFormMovimiento();
 
-  const tipoLabel = mov.tipo === 'COMPRA' ? 'Compra' : 'Venta';
-  toast(`${tipoLabel} registrada correctamente`, 'success');
+  const tipoLabel = mov.tipo === 'COMPRA' ? 'Compra' : mov.tipo === 'VENTA' ? 'Venta' : 'Traslado';
+  toast(`${tipoLabel} registrado correctamente`, 'success');
 }
 
 // ======================== HISTORY ========================
@@ -1582,12 +1618,21 @@ function renderHistorial() {
   }
 
   tbody.innerHTML = movs.map(m => {
-    const ubicBadge = m.ubicacion === 'PRINCIPAL'
-      ? '<span class="badge badge-principal"><span class="badge-dot"></span>Principal</span>'
-      : '<span class="badge badge-tinyshop"><span class="badge-dot"></span>TinyShop</span>';
+    const ubicNombre = u => u === 'PRINCIPAL' ? 'Principal' : 'TinyShop';
+    const ubicBadge = m.tipo === 'TRASLADO'
+      ? `<span class="badge badge-ruta">
+           <span class="badge badge-principal" style="padding:2px 7px">${ubicNombre(m.ubicacion)}</span>
+           <span style="color:var(--text-muted)">→</span>
+           <span class="badge badge-tinyshop" style="padding:2px 7px">${ubicNombre(m.ubicacionDestino)}</span>
+         </span>`
+      : m.ubicacion === 'PRINCIPAL'
+        ? '<span class="badge badge-principal"><span class="badge-dot"></span>Principal</span>'
+        : '<span class="badge badge-tinyshop"><span class="badge-dot"></span>TinyShop</span>';
     const tipoBadge = m.tipo === 'COMPRA'
       ? '<span class="badge badge-compra"><span class="badge-dot"></span>Compra</span>'
-      : '<span class="badge badge-venta"><span class="badge-dot"></span>Venta</span>';
+      : m.tipo === 'VENTA'
+        ? '<span class="badge badge-venta"><span class="badge-dot"></span>Venta</span>'
+        : '<span class="badge badge-traslado"><span class="badge-dot"></span>Traslado</span>';
 
     const itemsText = m.items.map(it => {
       const nombre = nombreProducto(it.productoId);
@@ -1775,14 +1820,34 @@ document.querySelectorAll('.nav-btn[data-vista]').forEach(btn => {
 document.querySelectorAll('#tipoSegmented .seg-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     formMov.tipo = btn.dataset.tipo;
-    document.querySelectorAll('#tipoSegmented .seg-btn').forEach(b => b.classList.toggle('active', b === btn));
+    // Al seleccionar TRASLADO, asegurar que origen ≠ destino
+    if (formMov.tipo === 'TRASLADO' && formMov.ubicacion === formMov.ubicacionDestino) {
+      formMov.ubicacionDestino = formMov.ubicacion === 'PRINCIPAL' ? 'TINYSHOP' : 'PRINCIPAL';
+    }
+    renderFormMovimiento();
   });
 });
 
 document.querySelectorAll('#ubicSegmented .seg-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     formMov.ubicacion = btn.dataset.ubic;
+    // En traslado, evitar que origen y destino sean iguales
+    if (formMov.tipo === 'TRASLADO' && formMov.ubicacion === formMov.ubicacionDestino) {
+      formMov.ubicacionDestino = formMov.ubicacion === 'PRINCIPAL' ? 'TINYSHOP' : 'PRINCIPAL';
+    }
     document.querySelectorAll('#ubicSegmented .seg-btn').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('#destinoSegmented .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.ubic === formMov.ubicacionDestino));
+  });
+});
+
+document.querySelectorAll('#destinoSegmented .seg-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    formMov.ubicacionDestino = btn.dataset.ubic;
+    if (formMov.ubicacion === formMov.ubicacionDestino) {
+      formMov.ubicacion = formMov.ubicacionDestino === 'PRINCIPAL' ? 'TINYSHOP' : 'PRINCIPAL';
+      document.querySelectorAll('#ubicSegmented .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.ubic === formMov.ubicacion));
+    }
+    document.querySelectorAll('#destinoSegmented .seg-btn').forEach(b => b.classList.toggle('active', b === btn));
   });
 });
 
