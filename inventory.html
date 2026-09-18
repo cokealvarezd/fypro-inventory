@@ -1640,6 +1640,7 @@ function resetFormMov() {
   formMov.ubicacionDestino = 'TINYSHOP';
   formMov.fecha = hoy();
   formMov.comentario = '';
+  formMov.montoTotal = null;
   formMov.items = [{ productoId: '', cantidad: 1 }];
 }
 
@@ -1648,6 +1649,8 @@ function renderFormMovimiento() {
 
   document.getElementById('movFecha').value = formMov.fecha;
   document.getElementById('movComentario').value = formMov.comentario;
+  const montoEl = document.getElementById('movMonto');
+  if (montoEl) montoEl.value = formMov.montoTotal || '';
 
   // Tipo buttons
   document.querySelectorAll('#tipoSegmented .seg-btn').forEach(btn => {
