@@ -1731,6 +1731,10 @@ function validarFormMov() {
     document.getElementById('movComentario').classList.remove('error');
   }
 
+  // Sync monto from DOM
+  const montoVal = parseFloat(document.getElementById('movMonto').value);
+  if (!isNaN(montoVal) && montoVal > 0) formMov.montoTotal = montoVal;
+
   // Sync current select/input values from DOM before validating
   document.querySelectorAll('#itemsList .mov-item-row').forEach((row, i) => {
     const sel = row.querySelector('select');
@@ -1764,7 +1768,7 @@ function guardarMovimiento() {
   const validItems = validarFormMov();
   if (!validItems) return;
 
-  const montoInput = parseFloat(document.getElementById('movMonto').value) || null;
+  const montoInput = parseFloat(document.getElementById('movMonto').value) || formMov.montoTotal || null;
   const mov = {
     id: generarId('mov'),
     tipo: formMov.tipo,
