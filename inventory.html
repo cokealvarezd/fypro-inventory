@@ -1047,10 +1047,13 @@
           <div class="page-title">Catálogo de Productos</div>
           <div class="page-subtitle">Administra los productos de tu inventario</div>
         </div>
-        <button class="btn btn-primary" onclick="abrirModalProducto()">
-          <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-11.25a.75.75 0 00-1.5 0v2.5h-2.5a.75.75 0 000 1.5h2.5v2.5a.75.75 0 001.5 0v-2.5h2.5a.75.75 0 000-1.5h-2.5v-2.5z" clip-rule="evenodd"/></svg>
-          Nuevo producto
-        </button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary" onclick="publicarTodosProductos()">Publicar todos</button>
+          <button class="btn btn-primary" onclick="abrirModalProducto()">
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-11.25a.75.75 0 00-1.5 0v2.5h-2.5a.75.75 0 000 1.5h2.5v2.5a.75.75 0 001.5 0v-2.5h2.5a.75.75 0 000-1.5h-2.5v-2.5z" clip-rule="evenodd"/></svg>
+            Nuevo producto
+          </button>
+        </div>
       </div>
 
       <div class="card">
@@ -1719,6 +1722,19 @@ function previsualizarFoto() {
   const img = document.getElementById('fotoPreviewImg');
   if (url) { img.src = url; preview.style.display = ''; }
   else { preview.style.display = 'none'; img.src = ''; }
+}
+
+function publicarTodosProductos() {
+  const activos = state.productos.filter(p => p.activo);
+  if (!confirm(`¿Publicar los ${activos.length} productos activos en la tienda?`)) return;
+  const batch = db.batch();
+  activos.forEach(p => {
+    p.publicado = true;
+    batch.update(db.collection('productos').doc(p.id), { publicado: true });
+  });
+  batch.commit()
+    .then(() => { renderTablaProductos(); toast(`${activos.length} productos publicados en la tienda`, 'success'); })
+    .catch(() => toast('Error al publicar productos', 'error'));
 }
 
 function togglePublicado(id) {
