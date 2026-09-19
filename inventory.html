@@ -2574,7 +2574,7 @@ async function enviarReporteWhatsApp() {
   const msg = generarMensajeReporte();
   const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(msg)}&apikey=${encodeURIComponent(apikey)}`;
   try {
-    await fetch(url);
+    await fetch(url, { mode: 'no-cors' });
     toast('Reporte enviado a WhatsApp ✓', 'success');
   } catch (e) {
     toast('Error al enviar: ' + e.message, 'error');
