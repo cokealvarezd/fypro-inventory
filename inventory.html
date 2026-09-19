@@ -1058,6 +1058,7 @@
           <table class="inv-table">
             <thead>
               <tr>
+                <th></th>
                 <th>Marca</th>
                 <th>Producto</th>
                 <th>Categoría</th>
@@ -1270,6 +1271,13 @@ function doGet(e) {
           <label class="form-label" for="prodCategoria">Categoría</label>
           <input type="text" id="prodCategoria" class="form-control" list="categoriasDatalist" placeholder="Ej: Suplementos, Recuperación…">
           <datalist id="categoriasDatalist"></datalist>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="prodFoto">URL de foto (Cloudinary)</label>
+          <input type="url" id="prodFoto" class="form-control" placeholder="https://res.cloudinary.com/…" oninput="previsualizarFoto()">
+          <div id="fotoPreview" style="margin-top:8px;display:none">
+            <img id="fotoPreviewImg" src="" alt="Vista previa" style="max-height:100px;max-width:100%;border-radius:6px;border:1px solid var(--border)">
+          </div>
         </div>
         <div class="form-label" style="margin-bottom:8px">Precios</div>
         <div class="price-fields" style="margin-bottom:8px">
@@ -1578,7 +1586,7 @@ function renderTablaProductos() {
   const activos = state.productos.filter(p => p.activo);
 
   if (activos.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg><h3>Sin productos</h3><p>Agrega tu primer producto para empezar.</p></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg><h3>Sin productos</h3><p>Agrega tu primer producto para empezar.</p></div></td></tr>';
     return;
   }
 
@@ -1587,6 +1595,9 @@ function renderTablaProductos() {
     const margenColor = margen ? (parseFloat(margen) >= 30 ? 'var(--success)' : parseFloat(margen) >= 10 ? 'var(--warning)' : 'var(--danger)') : '';
     const pub = p.publicado === true;
     return `<tr>
+      <td style="width:44px;padding:4px 8px">
+        ${p.foto ? `<img src="${escapeHtml(p.foto)}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:4px;border:1px solid var(--border)">` : '<div style="width:36px;height:36px;border-radius:4px;background:var(--bg);border:1px solid var(--border)"></div>'}
+      </td>
       <td><strong>${escapeHtml(p.marca)}</strong></td>
       <td>${escapeHtml(p.nombre)}</td>
       <td><span style="font-size:.78rem;color:var(--text-muted)">${escapeHtml(p.categoria || '—')}</span></td>
@@ -1632,12 +1643,15 @@ function abrirModalProducto(id = null) {
     document.getElementById('prodCosto').value = p.precioCosto || '';
     document.getElementById('prodVenta').value = p.precioVenta || '';
     document.getElementById('prodVentaIVA').value = p.precioVentaIVA || '';
+    document.getElementById('prodFoto').value = p.foto || '';
+    previsualizarFoto();
     actualizarMargenDisplay();
   } else {
     title.textContent = 'Nuevo producto';
     document.getElementById('editProductoId').value = '';
     document.getElementById('formProducto').reset();
     document.getElementById('margenDisplay').textContent = '—';
+    document.getElementById('fotoPreview').style.display = 'none';
   }
   modal.classList.remove('hidden');
 }
@@ -1675,6 +1689,7 @@ function guardarProducto() {
     marca,
     nombre,
     categoria: document.getElementById('prodCategoria').value.trim(),
+    foto: document.getElementById('prodFoto').value.trim() || null,
     precioCosto: parseFloat(document.getElementById('prodCosto').value) || null,
     precioVenta: parseFloat(document.getElementById('prodVenta').value) || null,
     precioVentaIVA: parseFloat(document.getElementById('prodVentaIVA').value) || null,
@@ -1696,6 +1711,14 @@ function guardarProducto() {
   }
   renderTablaProductos();
   cerrarModal();
+}
+
+function previsualizarFoto() {
+  const url = document.getElementById('prodFoto').value.trim();
+  const preview = document.getElementById('fotoPreview');
+  const img = document.getElementById('fotoPreviewImg');
+  if (url) { img.src = url; preview.style.display = ''; }
+  else { preview.style.display = 'none'; img.src = ''; }
 }
 
 function togglePublicado(id) {
