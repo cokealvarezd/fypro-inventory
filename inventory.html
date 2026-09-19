@@ -9,6 +9,7 @@
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
   <style>
     /* ===== DESIGN TOKENS ===== */
     :root {
@@ -723,11 +724,52 @@
       overflow-x:auto; white-space:pre-wrap; word-break:break-all;
       max-height:260px; overflow-y:auto; margin:10px 0;
     }
+
+    /* ===== LOGIN SCREEN ===== */
+    #loginScreen {
+      position:fixed; inset:0; z-index:2000;
+      background:var(--bg);
+      display:flex; align-items:center; justify-content:center;
+    }
+    .login-card {
+      background:var(--surface);
+      border-radius:var(--radius-lg);
+      box-shadow:var(--shadow-lg);
+      padding:40px 36px;
+      width:100%; max-width:380px;
+    }
+    .login-brand { text-align:center; margin-bottom:32px; }
+    .login-brand h2 { font-size:1.8rem; color:var(--primary); letter-spacing:-.02em; margin:0; }
+    .login-brand p { color:var(--text-muted); font-size:.88rem; margin:4px 0 0; }
+    #loginError { color:var(--danger); font-size:.83rem; margin-bottom:10px; min-height:18px; text-align:center; }
+    .login-btn { width:100%; margin-top:4px; }
+    @media(max-width:480px) { .login-card { padding:32px 20px; } }
   </style>
 </head>
 <body>
 
-<div class="layout">
+<!-- ===== LOGIN SCREEN ===== -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-brand">
+      <h2>FYPRO</h2>
+      <p>Sistema de Inventario</p>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email</label>
+      <input type="email" id="loginEmail" class="form-control" placeholder="tu@email.com" autocomplete="email">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Contraseña</label>
+      <input type="password" id="loginPassword" class="form-control" placeholder="••••••••" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter') login()">
+    </div>
+    <div id="loginError"></div>
+    <button class="btn btn-primary login-btn" onclick="login()">Ingresar</button>
+  </div>
+</div>
+
+<div class="layout" id="appLayout" style="display:none">
   <!-- ===== SIDEBAR ===== -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
@@ -770,6 +812,7 @@
     <div class="sidebar-footer">
       <button onclick="exportarDatos()" title="Exportar datos">Exportar</button>
       <button onclick="document.getElementById('importFile').click()" title="Importar datos">Importar</button>
+      <button onclick="logout()" title="Cerrar sesión" style="color:var(--danger)">Salir</button>
     </div>
   </aside>
 
@@ -2767,9 +2810,51 @@ document.addEventListener('keydown', e => {
 });
 
 // ======================== INIT ========================
+function login() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  const btn = document.querySelector('#loginScreen .btn');
+  errEl.textContent = '';
+  btn.disabled = true;
+  firebase.auth().signInWithEmailAndPassword(email, password)
+    .catch(() => {
+      errEl.textContent = 'Email o contraseña incorrectos.';
+      btn.disabled = false;
+    });
+}
+
+function logout() {
+  firebase.auth().signOut();
+}
+
+let _firestoreInit = false;
+
 function init() {
   resetFormMov();
-  initFirestore();
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAqpTKXmEElzToGHrb7yxZlmGBzrQuTppQ",
+    authDomain: "fypro-inventory.firebaseapp.com",
+    projectId: "fypro-inventory",
+    storageBucket: "fypro-inventory.firebasestorage.app",
+    messagingSenderId: "565439534984",
+    appId: "1:565439534984:web:66ebfb7486163940130c3d"
+  };
+  firebase.initializeApp(firebaseConfig);
+
+  firebase.auth().onAuthStateChanged(user => {
+    const loginScreen = document.getElementById('loginScreen');
+    const appLayout = document.getElementById('appLayout');
+    if (user) {
+      loginScreen.style.display = 'none';
+      appLayout.style.display = '';
+      if (!_firestoreInit) { _firestoreInit = true; initFirestore(); }
+    } else {
+      loginScreen.style.display = '';
+      appLayout.style.display = 'none';
+    }
+  });
 }
 
 init();
@@ -2792,16 +2877,6 @@ function setDbStatus(status) {
 }
 
 function initFirestore() {
-  const firebaseConfig = {
-    apiKey: "AIzaSyAqpTKXmEElzToGHrb7yxZlmGBzrQuTppQ",
-    authDomain: "fypro-inventory.firebaseapp.com",
-    projectId: "fypro-inventory",
-    storageBucket: "fypro-inventory.firebasestorage.app",
-    messagingSenderId: "565439534984",
-    appId: "1:565439534984:web:66ebfb7486163940130c3d"
-  };
-
-  firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
 
   // Persistencia offline (funciona aunque se pierda internet)
