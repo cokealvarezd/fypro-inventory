@@ -1038,7 +1038,10 @@
           <div class="page-title">Reportes</div>
           <div class="page-subtitle">Resumen mensual de compras, ventas y ganancias</div>
         </div>
-        <select class="filter-control" id="reporteMes" onchange="renderReportes()" style="min-width:160px"></select>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-secondary btn-sm" onclick="enviarReporteWhatsApp()" style="white-space:nowrap">📱 Enviar a WhatsApp</button>
+          <select class="filter-control" id="reporteMes" onchange="renderReportes()" style="min-width:160px"></select>
+        </div>
       </div>
 
       <div class="reporte-kpi-grid" id="reporteKpis">
@@ -1167,7 +1170,23 @@ function doGet(e) {
           <span id="claudeKeyMsg">Sin configurar</span>
         </div>
 
-        <div style="border-top:1px solid var(--border);padding-top:20px;margin-top:4px">
+        <div style="border-top:1px solid var(--border);padding-top:20px;margin-top:8px">
+          <h3 style="margin-bottom:8px">WhatsApp · CallMeBot</h3>
+          <p style="font-size:.875rem;color:var(--text-muted);margin-bottom:16px;line-height:1.6">Configura tu número y API key de <a href="https://www.callmebot.com/blog/free-api-whatsapp-messages/" target="_blank">CallMeBot</a> para enviar reportes semanales a WhatsApp.</p>
+          <div class="form-row" style="margin-bottom:12px">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Teléfono (con código de país, sin +)</label>
+              <input type="text" id="callmebotPhone" class="form-control" placeholder="56912345678">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">API Key de CallMeBot</label>
+              <input type="text" id="callmebotApikey" class="form-control" placeholder="1234567">
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="guardarCallmebotConfig()">Guardar</button>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:20px;margin-top:8px">
           <div style="font-size:.85rem;font-weight:600;margin-bottom:8px">Registrar desde claude.ai</div>
           <p style="font-size:.875rem;color:var(--text-muted);margin-bottom:12px;line-height:1.6">Crea un <strong>Proyecto</strong> en claude.ai y pega el siguiente prompt como instrucciones del proyecto. Después de eso, solo describe las transacciones y Claude generará un link para registrarlas automáticamente en esta app.</p>
           <button class="btn btn-secondary copy-btn btn-sm" onclick="copiarPromptClaude()" style="margin-bottom:8px">Copiar prompt</button>
@@ -2471,6 +2490,97 @@ function cancelarImport() {
   toast('Importación cancelada', 'warning');
 }
 
+// ======================== CALLMEBOT / WHATSAPP ========================
+const CALLMEBOT_PHONE_KEY = 'inv_callmebot_phone';
+const CALLMEBOT_APIKEY_KEY = 'inv_callmebot_apikey';
+
+function getCallmebotPhone()   { return localStorage.getItem(CALLMEBOT_PHONE_KEY)   || ''; }
+function getCallmebotApikey()  { return localStorage.getItem(CALLMEBOT_APIKEY_KEY)  || ''; }
+
+function guardarCallmebotConfig() {
+  const phone  = document.getElementById('callmebotPhone').value.trim();
+  const apikey = document.getElementById('callmebotApikey').value.trim();
+  localStorage.setItem(CALLMEBOT_PHONE_KEY,  phone);
+  localStorage.setItem(CALLMEBOT_APIKEY_KEY, apikey);
+  toast('Configuración de WhatsApp guardada', 'success');
+}
+
+function generarMensajeReporte() {
+  const hoyStr  = hoy();
+  const d7 = new Date(); d7.setDate(d7.getDate() - 6);
+  const d30 = new Date(); d30.setDate(d30.getDate() - 29);
+  const desde7  = d7.toISOString().slice(0, 10);
+  const desde30 = d30.toISOString().slice(0, 10);
+
+  // Estadísticas semanales
+  const movsSemana   = state.movimientos.filter(m => m.fecha >= desde7 && m.fecha <= hoyStr);
+  const ventasSemana = movsSemana.filter(m => m.tipo === 'VENTA');
+  const comprasSemana = movsSemana.filter(m => m.tipo === 'COMPRA');
+
+  let ingresos = 0;
+  ventasSemana.forEach(m => {
+    if (m.montoTotal) {
+      ingresos += m.montoTotal;
+    } else {
+      m.items.forEach(it => {
+        const p = state.productos.find(x => x.id === it.productoId);
+        if (p && p.precioVenta) ingresos += p.precioVenta * it.cantidad;
+      });
+    }
+  });
+
+  // Velocidad mensual de ventas por producto (últimos 30 días)
+  const vel30 = {};
+  state.movimientos.filter(m => m.tipo === 'VENTA' && m.fecha >= desde30).forEach(m => {
+    m.items.forEach(it => { vel30[it.productoId] = (vel30[it.productoId] || 0) + it.cantidad; });
+  });
+
+  // Stock actual y alertas
+  const stock = computeStock();
+  const alertas = [];
+  state.productos.filter(p => p.activo).forEach(p => {
+    const v = vel30[p.id] || 0;
+    if (v === 0) return;
+    const s = (stock[p.id]?.PRINCIPAL || 0) + (stock[p.id]?.TINYSHOP || 0);
+    const semanas = s / (v / 4);
+    if (semanas < 2) alertas.push({ nombre: `${p.marca} ${p.nombre}`, stock: s, velSem: Math.round(v / 4), semanas });
+  });
+  alertas.sort((a, b) => a.semanas - b.semanas);
+
+  let msg = `📊 Reporte FYPRO\n${formatearFecha(desde7)} al ${formatearFecha(hoyStr)}\n\n`;
+  msg += `💰 Ingresos: ${formatearMoneda(ingresos)}\n`;
+  msg += `🛒 Ventas: ${ventasSemana.length}  |  Compras: ${comprasSemana.length}`;
+
+  if (alertas.length > 0) {
+    msg += `\n\n⚠️ REPOSICIÓN URGENTE`;
+    alertas.forEach(a => {
+      const icon = a.semanas < 1 ? '🔴' : '🟡';
+      msg += `\n${icon} ${a.nombre}: ${a.stock}u · ${a.velSem}u/sem`;
+    });
+  } else {
+    msg += `\n\n✅ Inventario sin alertas`;
+  }
+  return msg;
+}
+
+async function enviarReporteWhatsApp() {
+  const phone  = getCallmebotPhone();
+  const apikey = getCallmebotApikey();
+  if (!phone || !apikey) {
+    toast('Configura CallMeBot en Configuración primero', 'warning');
+    navegarA('configuracion');
+    return;
+  }
+  const msg = generarMensajeReporte();
+  const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(msg)}&apikey=${encodeURIComponent(apikey)}`;
+  try {
+    await fetch(url);
+    toast('Reporte enviado a WhatsApp ✓', 'success');
+  } catch (e) {
+    toast('Error al enviar: ' + e.message, 'error');
+  }
+}
+
 // ======================== CLAUDE API KEY / CONFIG ========================
 function guardarClaudeApiKey() {
   const key = document.getElementById('claudeApiKey').value.trim();
@@ -2690,6 +2800,12 @@ function renderConfiguracion() {
   const input = document.getElementById('sheetsUrl');
   if (input && url) input.value = url;
   actualizarEstadoSync();
+
+  // CallMeBot
+  const cbPhone = document.getElementById('callmebotPhone');
+  if (cbPhone) cbPhone.value = getCallmebotPhone();
+  const cbKey = document.getElementById('callmebotApikey');
+  if (cbKey) cbKey.value = getCallmebotApikey();
 
   // Claude API key
   const claudeKey = getClaudeApiKey();
