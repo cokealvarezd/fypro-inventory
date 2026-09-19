@@ -1065,11 +1065,12 @@
                 <th class="num">Venta</th>
                 <th class="num">Venta c/IVA</th>
                 <th class="num">Margen</th>
+                <th class="num">Tienda</th>
                 <th></th>
               </tr>
             </thead>
             <tbody id="productosTableBody">
-              <tr><td colspan="8"><div class="empty-state"><p>No hay productos. Agrega el primero.</p></div></td></tr>
+              <tr><td colspan="9"><div class="empty-state"><p>No hay productos. Agrega el primero.</p></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -1577,13 +1578,14 @@ function renderTablaProductos() {
   const activos = state.productos.filter(p => p.activo);
 
   if (activos.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg><h3>Sin productos</h3><p>Agrega tu primer producto para empezar.</p></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg><h3>Sin productos</h3><p>Agrega tu primer producto para empezar.</p></div></td></tr>';
     return;
   }
 
   tbody.innerHTML = activos.map(p => {
     const margen = calcularMargen(p.precioCosto, p.precioVenta);
     const margenColor = margen ? (parseFloat(margen) >= 30 ? 'var(--success)' : parseFloat(margen) >= 10 ? 'var(--warning)' : 'var(--danger)') : '';
+    const pub = p.publicado === true;
     return `<tr>
       <td><strong>${escapeHtml(p.marca)}</strong></td>
       <td>${escapeHtml(p.nombre)}</td>
@@ -1592,6 +1594,15 @@ function renderTablaProductos() {
       <td class="num">${p.precioVenta ? formatearMoneda(p.precioVenta) : '—'}</td>
       <td class="num">${p.precioVentaIVA ? formatearMoneda(p.precioVentaIVA) : '—'}</td>
       <td class="num" style="color:${margenColor};font-weight:600">${margen || '—'}</td>
+      <td class="num">
+        <button onclick="togglePublicado('${escapeHtml(p.id)}')" title="${pub ? 'Quitar de tienda' : 'Publicar en tienda'}"
+          style="font-size:.75rem;padding:2px 8px;border-radius:20px;border:none;cursor:pointer;font-weight:600;
+                 background:${pub ? 'var(--primary)' : 'var(--bg)'};
+                 color:${pub ? '#fff' : 'var(--text-muted)'};
+                 border:1px solid ${pub ? 'var(--primary)' : 'var(--border)'}">
+          ${pub ? '✓ Activo' : 'Inactivo'}
+        </button>
+      </td>
       <td class="actions-cell">
         <button class="btn btn-icon" title="Editar" onclick="abrirModalProducto('${escapeHtml(p.id)}')">
           <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor"><path d="M5.433 13.917l1.262-3.155A4 4 0 017.58 9.42l6.92-6.918a2.121 2.121 0 013 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 01-.65-.65z"/><path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0010 3H4.75A2.75 2.75 0 002 5.75v9.5A2.75 2.75 0 004.75 18h9.5A2.75 2.75 0 0017 15.25V10a.75.75 0 00-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5z"/></svg>
@@ -1658,6 +1669,7 @@ function guardarProducto() {
   const nombre = document.getElementById('prodNombre').value.trim();
   if (!marca || !nombre) { toast('La marca y el nombre son obligatorios.', 'error'); return; }
 
+  const existing = state.productos.find(p => p.id === id);
   const prod = {
     id: id || generarId('prod'),
     marca,
@@ -1666,7 +1678,8 @@ function guardarProducto() {
     precioCosto: parseFloat(document.getElementById('prodCosto').value) || null,
     precioVenta: parseFloat(document.getElementById('prodVenta').value) || null,
     precioVentaIVA: parseFloat(document.getElementById('prodVentaIVA').value) || null,
-    activo: true
+    activo: true,
+    publicado: existing ? (existing.publicado === true) : false
   };
 
   if (db) {
@@ -1683,6 +1696,14 @@ function guardarProducto() {
   }
   renderTablaProductos();
   cerrarModal();
+}
+
+function togglePublicado(id) {
+  const p = state.productos.find(x => x.id === id);
+  if (!p) return;
+  p.publicado = !p.publicado;
+  if (db) db.collection('productos').doc(id).update({ publicado: p.publicado }).catch(() => {});
+  renderTablaProductos();
 }
 
 function eliminarProducto(id) {
