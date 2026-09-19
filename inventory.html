@@ -425,7 +425,7 @@
     .items-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
     .mov-item-row {
       display: grid;
-      grid-template-columns: 1fr 100px 36px;
+      grid-template-columns: 1fr 80px 36px;
       gap: 8px;
       align-items: center;
       background: var(--surface-2);
@@ -433,6 +433,7 @@
       border-radius: var(--radius);
       border: 1px solid var(--border);
     }
+    .mov-item-row.con-costo { grid-template-columns: 1fr 72px 130px 36px; }
     .mov-item-row select, .mov-item-row input { background: var(--surface); }
     .remove-item-btn {
       width: 32px; height: 32px;
@@ -650,7 +651,8 @@
       .metrics-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
       .metric-value { font-size: 1.5rem; }
       .form-row, .form-row-3, .price-fields { grid-template-columns: 1fr; }
-      .mov-item-row { grid-template-columns: 1fr 80px 32px; }
+      .mov-item-row { grid-template-columns: 1fr 72px 32px; }
+      .mov-item-row.con-costo { grid-template-columns: 1fr 60px 100px 32px; }
       .filter-bar { padding: 12px 16px; gap: 8px; }
       .filter-group { min-width: calc(50% - 4px); }
       .modal-box { max-width: 100%; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
@@ -896,7 +898,8 @@
 
             <div class="form-label" style="margin-bottom:8px">Productos <span>*</span></div>
             <div class="items-list" id="itemsList"></div>
-            <div id="errItems" style="font-size:.78rem;color:var(--danger);margin-bottom:10px;display:none">Agrega al menos un producto con cantidad válida.</div>
+            <div id="errItems" style="font-size:.78rem;color:var(--danger);margin-bottom:6px;display:none">Agrega al menos un producto con cantidad válida.</div>
+            <div id="costoHint" style="display:none;font-size:.78rem;color:var(--text-muted);margin-bottom:10px">Costos netos (sin IVA). Se actualiza el precio de costo del catálogo al guardar.</div>
 
             <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
               <button type="button" class="btn btn-secondary btn-sm" onclick="agregarItemMovimiento()">
@@ -1698,35 +1701,49 @@ function renderFormMovimiento() {
   if (!esVenta) { document.getElementById('movMonto').value = ''; document.getElementById('montoInfo').textContent = ''; }
   // Botón importar factura: solo en compras
   document.getElementById('btnImportarFactura').style.display = esCompra ? '' : 'none';
+  document.getElementById('costoHint').style.display = esCompra ? '' : 'none';
 
   // Items
   const list = document.getElementById('itemsList');
   const activos = state.productos.filter(p => p.activo);
-  const optsHtml = activos.map(p =>
-    `<option value="${escapeHtml(p.id)}">${escapeHtml(p.marca)} ${escapeHtml(p.nombre)}</option>`
-  ).join('');
 
-  list.innerHTML = formMov.items.map((item, i) => `
-    <div class="mov-item-row" data-index="${i}">
+  list.innerHTML = formMov.items.map((item, i) => {
+    const costoDefault = item.costo != null
+      ? item.costo
+      : (activos.find(p => p.id === item.productoId)?.precioCosto ?? '');
+    return `
+    <div class="mov-item-row${esCompra ? ' con-costo' : ''}" data-index="${i}">
       <select class="form-control" onchange="actualizarItemMov(${i},'productoId',this.value)">
         <option value="">— Seleccionar producto —</option>
         ${activos.map(p => `<option value="${escapeHtml(p.id)}" ${p.id === item.productoId ? 'selected' : ''}>${escapeHtml(p.marca)} ${escapeHtml(p.nombre)}</option>`).join('')}
       </select>
       <input type="number" class="form-control" value="${item.cantidad}" min="1" step="1"
         placeholder="Cant." onchange="actualizarItemMov(${i},'cantidad',parseInt(this.value)||1)">
+      ${esCompra ? `<div class="input-prefix">
+        <span>$</span>
+        <input type="number" class="form-control costo-neto" id="costo-${i}" value="${costoDefault}"
+          min="0" step="1" placeholder="Costo neto"
+          onchange="actualizarItemMov(${i},'costo',parseFloat(this.value)||null)">
+      </div>` : ''}
       <button type="button" class="remove-item-btn" onclick="removerItemMov(${i})" title="Quitar">
         <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
       </button>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function actualizarItemMov(idx, campo, valor) {
   formMov.items[idx][campo] = valor;
+  if (campo === 'productoId' && formMov.tipo === 'COMPRA') {
+    const p = state.productos.find(x => x.id === valor);
+    formMov.items[idx].costo = p?.precioCosto ?? null;
+    const costoEl = document.getElementById('costo-' + idx);
+    if (costoEl) costoEl.value = p?.precioCosto ?? '';
+  }
 }
 
 function agregarItemMovimiento() {
-  formMov.items.push({ productoId: '', cantidad: 1 });
+  formMov.items.push({ productoId: '', cantidad: 1, costo: null });
   renderFormMovimiento();
 }
 
@@ -1758,9 +1775,14 @@ function validarFormMov() {
   // Sync current select/input values from DOM before validating
   document.querySelectorAll('#itemsList .mov-item-row').forEach((row, i) => {
     const sel = row.querySelector('select');
-    const inp = row.querySelector('input[type="number"]');
+    const cantInp = row.querySelector('input[type="number"]:not(.costo-neto)');
+    const costoInp = row.querySelector('.costo-neto');
     if (sel) formMov.items[i].productoId = sel.value;
-    if (inp) formMov.items[i].cantidad = parseInt(inp.value) || 0;
+    if (cantInp) formMov.items[i].cantidad = parseInt(cantInp.value) || 0;
+    if (costoInp) {
+      const v = parseFloat(costoInp.value);
+      formMov.items[i].costo = (!isNaN(v) && v > 0) ? v : null;
+    }
   });
   formMov.comentario = comentario;
   formMov.fecha = document.getElementById('movFecha').value;
@@ -1789,6 +1811,14 @@ function guardarMovimiento() {
   if (!validItems) return;
 
   const montoInput = parseFloat(document.getElementById('movMonto').value) || formMov.montoTotal || null;
+
+  // Clean items: include costo only for COMPRAs
+  const cleanItems = validItems.map(it => {
+    const item = { productoId: it.productoId, cantidad: it.cantidad };
+    if (formMov.tipo === 'COMPRA' && it.costo != null) item.costo = it.costo;
+    return item;
+  });
+
   const mov = {
     id: generarId('mov'),
     tipo: formMov.tipo,
@@ -1797,9 +1827,23 @@ function guardarMovimiento() {
     ...(formMov.tipo === 'VENTA' && montoInput && { montoTotal: montoInput }),
     fecha: formMov.fecha || hoy(),
     comentario: formMov.comentario,
-    items: validItems,
+    items: cleanItems,
     creadoEn: Date.now()
   };
+
+  // Actualizar precioCosto del catálogo con el costo real de esta compra
+  if (formMov.tipo === 'COMPRA') {
+    cleanItems.forEach(it => {
+      if (!it.costo) return;
+      const prod = state.productos.find(p => p.id === it.productoId);
+      if (!prod) return;
+      prod.precioCosto = it.costo;
+      prod.precioCostoIVA = Math.round(it.costo * 1.19);
+      if (db) db.collection('productos').doc(prod.id)
+        .update({ precioCosto: it.costo, precioCostoIVA: Math.round(it.costo * 1.19) })
+        .catch(() => {});
+    });
+  }
 
   state.movimientos.unshift(mov);
   if (db) {
@@ -2127,14 +2171,13 @@ function renderReportes() {
       });
     }
     m.items.forEach(it => {
-      const p = state.productos.find(x => x.id === it.productoId);
-      if (p && p.precioCosto) costoVentas += p.precioCosto * it.cantidad;
+      costoVentas += costoPromedioPonderado(it.productoId) * it.cantidad;
     });
   });
   comprasMes.forEach(m => {
     m.items.forEach(it => {
-      const p = state.productos.find(x => x.id === it.productoId);
-      if (p && p.precioCosto) inversionCompras += p.precioCosto * it.cantidad;
+      const c = it.costo ?? costoPromedioPonderado(it.productoId);
+      inversionCompras += c * it.cantidad;
     });
   });
   const ganancia = ingresos - costoVentas;
@@ -2168,7 +2211,7 @@ function renderReportes() {
       productoMap[it.productoId].unidades += it.cantidad;
       const ventaBase = p && p.precioVenta ? p.precioVenta * it.cantidad : 0;
       productoMap[it.productoId].ingresos += m.montoTotal ? ventaBase * montoUnitRatio : ventaBase;
-      productoMap[it.productoId].costo += p && p.precioCosto ? p.precioCosto * it.cantidad : 0;
+      productoMap[it.productoId].costo += costoPromedioPonderado(it.productoId) * it.cantidad;
     });
   });
 
@@ -2490,6 +2533,23 @@ function cancelarImport() {
   toast('Importación cancelada', 'warning');
 }
 
+// ======================== COSTO PROMEDIO PONDERADO ========================
+function costoPromedioPonderado(productoId) {
+  let totalUnits = 0, totalValue = 0;
+  state.movimientos
+    .filter(m => m.tipo === 'COMPRA')
+    .forEach(m => {
+      m.items
+        .filter(it => it.productoId === productoId && it.costo != null)
+        .forEach(it => {
+          totalUnits += it.cantidad;
+          totalValue += it.costo * it.cantidad;
+        });
+    });
+  if (totalUnits > 0) return totalValue / totalUnits;
+  return state.productos.find(p => p.id === productoId)?.precioCosto ?? 0;
+}
+
 // ======================== CALLMEBOT / WHATSAPP ========================
 const CALLMEBOT_PHONE_KEY = 'inv_callmebot_phone';
 const CALLMEBOT_APIKEY_KEY = 'inv_callmebot_apikey';
@@ -2547,8 +2607,16 @@ function generarMensajeReporte() {
   });
   alertas.sort((a, b) => a.semanas - b.semanas);
 
+  // Costo de ventas usando costo promedio ponderado
+  let costoVentas = 0;
+  ventasSemana.forEach(m => {
+    m.items.forEach(it => { costoVentas += costoPromedioPonderado(it.productoId) * it.cantidad; });
+  });
+  const ganancia = ingresos - costoVentas;
+
   let msg = `📊 Reporte FYPRO\n${formatearFecha(desde7)} al ${formatearFecha(hoyStr)}\n\n`;
   msg += `💰 Ingresos: ${formatearMoneda(ingresos)}\n`;
+  msg += `📈 Ganancia: ${formatearMoneda(ganancia)}\n`;
   msg += `🛒 Ventas: ${ventasSemana.length}  |  Compras: ${comprasSemana.length}`;
 
   if (alertas.length > 0) {
