@@ -16,8 +16,7 @@ URL: http://localhost:3000/inventory.html
 | Archivo | Descripción |
 |---|---|
 | `inventory.html` | **App principal** — todo el código en un solo archivo (HTML + CSS + JS) |
-| `index.html` | Proyecto tocadiscos (no relacionado, ignorar) |
-| `style.css` | Estilos del tocadiscos (no relacionado, ignorar) |
+| `index.html` | Redirige a `inventory.html` (GitHub Pages root) |
 
 ## Repositorio
 
@@ -99,4 +98,4 @@ GPS Cartográficos e-Trex, GPS Cartográficos GPS Map, GPS Línea Montana, Equip
 - No agregar frameworks (React, Vue, etc.) — el proyecto es vanilla a propósito
 - No dividir en múltiples archivos JS/CSS — todo vive en `inventory.html`
 - No poner decimales en precios CLP
-- No modificar `index.html` ni `style.css` (son del proyecto tocadiscos)
+- No modificar `index.html` (solo redirige a inventory.html)
