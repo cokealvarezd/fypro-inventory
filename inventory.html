@@ -812,6 +812,7 @@
     <div class="sidebar-footer">
       <button onclick="exportarDatos()" title="Exportar datos">Exportar</button>
       <button onclick="document.getElementById('importFile').click()" title="Importar datos">Importar</button>
+      <button onclick="recalcularStockTodo()" title="Sincronizar stock a Firestore">Sync stock</button>
       <button onclick="logout()" title="Cerrar sesión" style="color:var(--danger)">Salir</button>
     </div>
   </aside>
@@ -1476,6 +1477,23 @@ function nombreProducto(id) {
 }
 
 // ======================== STOCK ========================
+function sincronizarStockFirestore(productosIds) {
+  if (!db) return;
+  const stock = computeStock();
+  const ids = productosIds ? [...new Set(productosIds)] : state.productos.map(p => p.id);
+  ids.forEach(id => {
+    const s = stock[id] || { PRINCIPAL: 0, TINYSHOP: 0 };
+    const total = (s.PRINCIPAL || 0) + (s.TINYSHOP || 0);
+    db.collection('productos').doc(id).update({ stock: total }).catch(() => {});
+  });
+}
+
+function recalcularStockTodo() {
+  if (!db) { toast('Sin conexión a base de datos', 'error'); return; }
+  sincronizarStockFirestore(null);
+  toast('Stock sincronizado en Firestore', 'success');
+}
+
 function computeStock() {
   const stock = {};
   for (const prod of state.productos) {
@@ -1952,6 +1970,7 @@ function guardarMovimiento() {
   if (db) {
     db.collection('movimientos').doc(mov.id).set(mov)
       .catch(() => toast('Error al guardar movimiento en la base de datos', 'error'));
+    sincronizarStockFirestore(mov.items.map(i => i.productoId));
   }
   enviarASheets(mov);
   resetFormMov();
