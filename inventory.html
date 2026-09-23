@@ -725,6 +725,31 @@
       max-height:260px; overflow-y:auto; margin:10px 0;
     }
 
+    /* ===== ÓRDENES ===== */
+    .badge-pendiente  { background: var(--warning-bg); color: var(--warning); border: 1px solid #fde68a; }
+    .badge-pagada     { background: var(--success-bg); color: var(--success); border: 1px solid #bbf7d0; }
+    .badge-despachada { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+    .badge-rechazada  { background: var(--danger-bg);  color: var(--danger);  border: 1px solid #fecaca; }
+    .orden-row td { cursor: pointer; }
+    .orden-detalle { display:none; background:#f8fafc; }
+    .orden-detalle.open { display:table-row; }
+    .orden-detalle-inner { padding:16px 20px; }
+    .orden-detalle-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+    @media(max-width:768px) { .orden-detalle-grid { grid-template-columns:1fr; } }
+    .orden-detalle-block { font-size:.82rem; }
+    .orden-detalle-block strong { display:block; font-size:.7rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px; }
+    .orden-detalle-block p { color:var(--text); line-height:1.6; margin:0; }
+    .orden-items-list { margin-top:2px; }
+    .orden-items-list li { padding:3px 0; border-bottom:1px solid var(--border); }
+    .orden-items-list li:last-child { border-bottom:none; }
+    .estado-select {
+      padding:4px 8px; border-radius:20px; font-size:.75rem; font-weight:600;
+      border:1px solid var(--border); background:var(--surface); cursor:pointer;
+      transition: all var(--transition);
+    }
+    .ordenes-filter-bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+    .ordenes-count { font-size:.82rem; color:var(--text-muted); margin-left:auto; }
+
     /* ===== LOGIN SCREEN ===== */
     #loginScreen {
       position:fixed; inset:0; z-index:2000;
@@ -797,6 +822,11 @@
       <button class="nav-btn" data-vista="reportes">
         <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
         Reportes
+      </button>
+      <button class="nav-btn" data-vista="ordenes">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+        Órdenes
+        <span id="ordenesBadge" class="sheets-badge hidden"></span>
       </button>
       <div class="nav-label">Configuración</div>
       <button class="nav-btn" data-vista="productos">
@@ -1247,6 +1277,56 @@ function doGet(e) {
       </div>
     </section>
 
+    <!-- ===== ÓRDENES ===== -->
+    <section id="sec-ordenes" class="inv-section hidden">
+      <div class="page-header" style="padding:32px 0 24px">
+        <div>
+          <div class="page-title">Órdenes</div>
+          <div class="page-subtitle">Pedidos recibidos desde la tienda online</div>
+        </div>
+      </div>
+
+      <div class="ordenes-filter-bar">
+        <div class="filter-group">
+          <label class="filter-label">Estado</label>
+          <select class="filter-control" id="ordenesFilterEstado" onchange="renderOrdenes()">
+            <option value="">Todos</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="pagada">Pagada</option>
+            <option value="despachada">Despachada</option>
+            <option value="rechazada">Rechazada</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">Buscar</label>
+          <input class="filter-control" id="ordenesFilterBuscar" placeholder="Nombre, email…" oninput="renderOrdenes()">
+        </div>
+        <span class="ordenes-count" id="ordenesCuenta"></span>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table class="inv-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Fecha</th>
+                <th>N° Pedido</th>
+                <th>Cliente</th>
+                <th>Productos</th>
+                <th class="num">Total</th>
+                <th>Entrega</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="ordenesTableBody">
+              <tr><td colspan="8"><div class="empty-state"><p>Cargando órdenes…</p></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -1379,6 +1459,7 @@ let db = null; // Firestore instance — declarado aquí para evitar TDZ
 const state = {
   productos: [],
   movimientos: [],
+  ordenes: [],
   vistaActual: 'dashboard'
 };
 
@@ -1535,6 +1616,7 @@ function renderVista(vista) {
   else if (vista === 'historial') renderHistorial();
   else if (vista === 'reportes') renderReportes();
   else if (vista === 'configuracion') renderConfiguracion();
+  else if (vista === 'ordenes') renderOrdenes();
 }
 
 function toggleSidebar() {
@@ -2965,10 +3047,10 @@ function initFirestore() {
 
   setDbStatus('connecting');
 
-  let prodOk = false, movOk = false, primeraVez = true;
+  let prodOk = false, movOk = false, ordenesOk = false, primeraVez = true;
 
   function onListenerReady() {
-    if (!prodOk || !movOk) return;
+    if (!prodOk || !movOk || !ordenesOk) return;
     setDbStatus('connected');
     if (primeraVez) {
       primeraVez = false;
@@ -2991,6 +3073,157 @@ function initFirestore() {
     movOk = true;
     onListenerReady();
   }, () => setDbStatus('error'));
+
+  db.collection('ordenes').orderBy('creadoEn', 'desc').onSnapshot(snap => {
+    state.ordenes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    ordenesOk = true;
+    const pendientes = state.ordenes.filter(o => o.estado === 'pendiente').length;
+    const badge = document.getElementById('ordenesBadge');
+    if (badge) {
+      if (pendientes > 0) { badge.className = 'sheets-badge'; badge.title = `${pendientes} pendiente${pendientes > 1 ? 's' : ''}`; }
+      else badge.className = 'sheets-badge hidden';
+    }
+    onListenerReady();
+    if (state.vistaActual === 'ordenes') renderOrdenes();
+  }, () => { ordenesOk = true; onListenerReady(); });
+}
+
+// ======================== ÓRDENES ========================
+function renderOrdenes() {
+  const tbody = document.getElementById('ordenesTableBody');
+  if (!tbody) return;
+
+  const filtroEstado = document.getElementById('ordenesFilterEstado')?.value || '';
+  const filtroBuscar = (document.getElementById('ordenesFilterBuscar')?.value || '').toLowerCase();
+
+  let ordenes = [...state.ordenes];
+
+  if (filtroEstado) ordenes = ordenes.filter(o => o.estado === filtroEstado);
+  if (filtroBuscar) {
+    ordenes = ordenes.filter(o => {
+      const nombre = (o.contacto?.nombre || '').toLowerCase();
+      const email  = (o.contacto?.email  || '').toLowerCase();
+      const id     = (o.id || '').toLowerCase();
+      return nombre.includes(filtroBuscar) || email.includes(filtroBuscar) || id.includes(filtroBuscar);
+    });
+  }
+
+  const cuota = document.getElementById('ordenesCuenta');
+  if (cuota) cuota.textContent = `${ordenes.length} orden${ordenes.length !== 1 ? 'es' : ''}`;
+
+  if (ordenes.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+      <h3>Sin órdenes</h3><p>Los pedidos de la tienda aparecerán aquí.</p>
+    </div></td></tr>`;
+    return;
+  }
+
+  const estadoLabel = { pendiente: 'Pendiente', pagada: 'Pagada', despachada: 'Despachada', rechazada: 'Rechazada' };
+  const estadoOpciones = ['pendiente', 'pagada', 'despachada', 'rechazada'];
+
+  tbody.innerHTML = ordenes.map(o => {
+    const fecha = o.creadoEn ? new Date(o.creadoEn).toLocaleString('es-CL', { dateStyle:'short', timeStyle:'short' }) : '—';
+    const items = Array.isArray(o.items) ? o.items : [];
+    const resumenItems = items.length
+      ? items.map(i => {
+          const prod = state.productos.find(p => p.id === i.productoId);
+          const nombre = prod ? `${prod.marca} ${prod.nombre}` : i.productoId;
+          return `${escapeHtml(nombre)} x${i.cantidad}`;
+        }).join(', ')
+      : '—';
+    const total = typeof o.total === 'number' ? formatearMoneda(o.total) : '—';
+    const entrega = o.despacho?.tipo === 'retiro'
+      ? `Retiro ${o.despacho.tienda === 'TINYSHOP' ? 'TinyShop' : 'Principal'}`
+      : `Despacho · ${escapeHtml(o.despacho?.comuna || '')}`;
+
+    const selectOpciones = estadoOpciones.map(e =>
+      `<option value="${e}" ${o.estado === e ? 'selected' : ''}>${estadoLabel[e] || e}</option>`
+    ).join('');
+
+    // Detalle expandible
+    const itemsDetalle = items.map(i => {
+      const prod = state.productos.find(p => p.id === i.productoId);
+      const nombre = prod ? `${prod.marca} ${prod.nombre}` : i.productoId;
+      const precio = typeof i.precioUnitario === 'number' ? formatearMoneda(i.precioUnitario) : '';
+      return `<li>${escapeHtml(nombre)} — x${i.cantidad}${precio ? ` · ${precio} c/u` : ''}</li>`;
+    }).join('');
+
+    const despachoDetalle = o.despacho?.tipo === 'retiro'
+      ? `Retiro en ${o.despacho.tienda === 'TINYSHOP' ? 'TinyShop' : 'Tienda Principal'}`
+      : [o.despacho?.direccion, o.despacho?.comuna, o.despacho?.region].filter(Boolean).map(escapeHtml).join(', ');
+
+    return `
+      <tr class="orden-row" onclick="toggleDetalleOrden('${escapeHtml(o.id)}')">
+        <td style="width:28px;padding:8px 8px 8px 16px">
+          <svg id="chevron-${escapeHtml(o.id)}" width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="color:var(--text-muted);transition:transform .2s">
+            <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd"/>
+          </svg>
+        </td>
+        <td style="white-space:nowrap;font-size:.8rem">${escapeHtml(fecha)}</td>
+        <td style="font-family:monospace;font-size:.75rem;color:var(--text-muted)">${escapeHtml(o.id)}</td>
+        <td>
+          <div style="font-size:.85rem;font-weight:500">${escapeHtml(o.contacto?.nombre || '—')}</div>
+          <div style="font-size:.75rem;color:var(--text-muted)">${escapeHtml(o.contacto?.email || '')}</div>
+        </td>
+        <td style="font-size:.8rem;color:var(--text-muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${resumenItems}</td>
+        <td class="num" style="font-weight:600">${total}</td>
+        <td style="font-size:.8rem">${escapeHtml(entrega)}</td>
+        <td onclick="event.stopPropagation()">
+          <select class="estado-select badge badge-${escapeHtml(o.estado || 'pendiente')}"
+            onchange="cambiarEstadoOrden('${escapeHtml(o.id)}', this.value)">
+            ${selectOpciones}
+          </select>
+        </td>
+      </tr>
+      <tr class="orden-detalle" id="detalle-${escapeHtml(o.id)}">
+        <td colspan="8">
+          <div class="orden-detalle-inner">
+            <div class="orden-detalle-grid">
+              <div class="orden-detalle-block">
+                <strong>Productos</strong>
+                <ul class="orden-items-list">${itemsDetalle}</ul>
+              </div>
+              <div class="orden-detalle-block">
+                <strong>Contacto</strong>
+                <p>${escapeHtml(o.contacto?.nombre || '—')}<br>
+                   ${escapeHtml(o.contacto?.email || '')}<br>
+                   ${escapeHtml(o.contacto?.telefono || '')}</p>
+              </div>
+              <div class="orden-detalle-block">
+                <strong>Entrega</strong>
+                <p>${escapeHtml(despachoDetalle)}</p>
+              </div>
+            </div>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function toggleDetalleOrden(id) {
+  const detalle = document.getElementById(`detalle-${id}`);
+  const chevron = document.getElementById(`chevron-${id}`);
+  if (!detalle) return;
+  const abierto = detalle.classList.toggle('open');
+  if (chevron) chevron.style.transform = abierto ? 'rotate(90deg)' : '';
+}
+
+async function cambiarEstadoOrden(id, nuevoEstado) {
+  if (!db) { toast('Sin conexión a base de datos', 'error'); return; }
+  try {
+    await db.collection('ordenes').doc(id).update({ estado: nuevoEstado });
+    // Actualiza el badge del select visualmente
+    const select = document.querySelector(`#detalle-${id}`)?.previousElementSibling?.querySelector('.estado-select')
+      || document.querySelector(`[onchange*="${id}"]`);
+    if (select) {
+      select.className = `estado-select badge badge-${nuevoEstado}`;
+    }
+    toast(`Estado actualizado: ${nuevoEstado}`, 'success');
+  } catch (err) {
+    toast('Error al actualizar estado', 'error');
+    console.error(err);
+  }
 }
 
 // ======================== GOOGLE SHEETS SYNC ========================
