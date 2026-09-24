@@ -1393,10 +1393,11 @@ function doGet(e) {
           <div id="prodDescripcionEditor"></div>
         </div>
         <div class="form-group">
-          <label class="form-label" for="prodFoto">URL de foto (Cloudinary)</label>
-          <input type="url" id="prodFoto" class="form-control" placeholder="https://res.cloudinary.com/…" oninput="previsualizarFoto()">
-          <div id="fotoPreview" style="margin-top:8px;display:none">
-            <img id="fotoPreviewImg" src="" alt="Vista previa" style="max-height:100px;max-width:100%;border-radius:6px;border:1px solid var(--border)">
+          <label class="form-label">Fotos <span style="font-weight:400;color:var(--text-muted);font-size:11px">(primera = imagen principal en el listing)</span></label>
+          <div id="fotosLista" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+          <div style="display:flex;gap:6px">
+            <input type="url" id="prodFotoNueva" class="form-control" placeholder="https://res.cloudinary.com/…" style="flex:1">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="agregarFoto()" style="white-space:nowrap">+ Agregar</button>
           </div>
         </div>
         <div class="form-label" style="margin-bottom:8px">Precios</div>
@@ -1802,19 +1803,19 @@ function abrirModalProducto(id = null) {
     document.getElementById('prodCosto').value = p.precioCosto || '';
     document.getElementById('prodVenta').value = p.precioVenta || '';
     document.getElementById('prodVentaIVA').value = p.precioVentaIVA || '';
-    document.getElementById('prodFoto').value = p.foto || '';
+    const fotosIniciales = p.fotos?.length ? p.fotos : (p.foto ? [p.foto] : []);
+    renderFotosLista(fotosIniciales);
     if (quillDesc) {
       if (p.descripcion) quillDesc.clipboard.dangerouslyPasteHTML(p.descripcion);
       else quillDesc.setContents([]);
     }
-    previsualizarFoto();
     actualizarMargenDisplay();
   } else {
     title.textContent = 'Nuevo producto';
     document.getElementById('editProductoId').value = '';
     document.getElementById('formProducto').reset();
     document.getElementById('margenDisplay').textContent = '—';
-    document.getElementById('fotoPreview').style.display = 'none';
+    renderFotosLista([]);
     if (quillDesc) quillDesc.setContents([]);
   }
   modal.classList.remove('hidden');
@@ -1859,7 +1860,8 @@ function guardarProducto() {
     nombre,
     categoria: document.getElementById('prodCategoria').value.trim(),
     descripcion,
-    foto: document.getElementById('prodFoto').value.trim() || null,
+    fotos: getFotosActuales(),
+    foto: getFotosActuales()[0] || null,
     precioCosto: parseFloat(document.getElementById('prodCosto').value) || null,
     precioVenta: parseFloat(document.getElementById('prodVenta').value) || null,
     precioVentaIVA: parseFloat(document.getElementById('prodVentaIVA').value) || null,
@@ -1883,12 +1885,59 @@ function guardarProducto() {
   cerrarModal();
 }
 
-function previsualizarFoto() {
-  const url = document.getElementById('prodFoto').value.trim();
-  const preview = document.getElementById('fotoPreview');
-  const img = document.getElementById('fotoPreviewImg');
-  if (url) { img.src = url; preview.style.display = ''; }
-  else { preview.style.display = 'none'; img.src = ''; }
+let _fotosActuales = [];
+
+function getFotosActuales() { return [..._fotosActuales]; }
+
+function renderFotosLista(lista) {
+  _fotosActuales = [...lista];
+  const el = document.getElementById('fotosLista');
+  if (!_fotosActuales.length) {
+    el.innerHTML = '<p style="font-size:12px;color:var(--text-muted);padding:4px 0">Sin fotos. Agrega al menos una URL.</p>';
+    return;
+  }
+  el.innerHTML = _fotosActuales.map((url, i) => `
+    <div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 8px">
+      <img src="${escapeHtml(url)}" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:4px;border:1px solid var(--border);flex-shrink:0" onerror="this.style.display='none'">
+      <span style="flex:1;font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(url)}">${i === 0 ? '<strong style="color:var(--primary);font-size:10px">PRINCIPAL · </strong>' : ''}${escapeHtml(url)}</span>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        ${i > 0 ? `<button type="button" class="btn btn-secondary btn-sm" onclick="moverFoto(${i},-1)" title="Subir">↑</button>` : ''}
+        ${i < _fotosActuales.length - 1 ? `<button type="button" class="btn btn-secondary btn-sm" onclick="moverFoto(${i},1)" title="Bajar">↓</button>` : ''}
+        <button type="button" class="btn btn-secondary btn-sm" onclick="editarFoto(${i})" title="Editar URL">✏️</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="eliminarFoto(${i})" title="Eliminar" style="color:#e53e3e">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function agregarFoto() {
+  const input = document.getElementById('prodFotoNueva');
+  const url = input.value.trim();
+  if (!url) return;
+  _fotosActuales.push(url);
+  renderFotosLista(_fotosActuales);
+  input.value = '';
+}
+
+function editarFoto(i) {
+  const input = document.getElementById('prodFotoNueva');
+  input.value = _fotosActuales[i];
+  _fotosActuales.splice(i, 1);
+  renderFotosLista(_fotosActuales);
+  input.focus();
+  input.select();
+}
+
+function eliminarFoto(i) {
+  _fotosActuales.splice(i, 1);
+  renderFotosLista(_fotosActuales);
+}
+
+function moverFoto(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= _fotosActuales.length) return;
+  [_fotosActuales[i], _fotosActuales[j]] = [_fotosActuales[j], _fotosActuales[i]];
+  renderFotosLista(_fotosActuales);
 }
 
 function publicarTodosProductos() {
