@@ -2240,7 +2240,8 @@ function renderHistorial() {
       } else {
         const calc = m.items.reduce((s, it) => {
           const p = state.productos.find(x => x.id === it.productoId);
-          return s + (p && p.precioVenta ? p.precioVenta * it.cantidad : 0);
+          const precio = p ? (p.precioVentaIVA ?? p.precioVenta ?? 0) : 0;
+          return s + precio * it.cantidad;
         }, 0);
         montoCell = calc ? `<span style="color:var(--text-muted);font-size:.8rem">${formatearMoneda(calc)}</span>` : '—';
       }
@@ -2490,7 +2491,7 @@ function renderReportes() {
     } else {
       m.items.forEach(it => {
         const p = state.productos.find(x => x.id === it.productoId);
-        if (p && p.precioVenta) ingresos += p.precioVenta * it.cantidad;
+        ingresos += (p ? (p.precioVentaIVA ?? p.precioVenta ?? 0) : 0) * it.cantidad;
       });
     }
     m.items.forEach(it => {
@@ -2590,7 +2591,7 @@ function renderGraficoMensual(meses6) {
     state.movimientos.filter(m => m.fecha && m.fecha.startsWith(mes)).forEach(m => {
       if (m.tipo === 'VENTA') {
         if (m.montoTotal) { ingresos += m.montoTotal; }
-        else { m.items.forEach(it => { const p = state.productos.find(x=>x.id===it.productoId); if(p&&p.precioVenta) ingresos += p.precioVenta*it.cantidad; }); }
+        else { m.items.forEach(it => { const p = state.productos.find(x=>x.id===it.productoId); ingresos += (p ? (p.precioVentaIVA ?? p.precioVenta ?? 0) : 0) * it.cantidad; }); }
       } else if (m.tipo === 'COMPRA') {
         m.items.forEach(it => { const p = state.productos.find(x=>x.id===it.productoId); if(p&&p.precioCosto) compras += p.precioCosto*it.cantidad; });
       }
@@ -2907,7 +2908,7 @@ function generarMensajeReporte() {
     } else {
       m.items.forEach(it => {
         const p = state.productos.find(x => x.id === it.productoId);
-        if (p && p.precioVenta) ingresos += p.precioVenta * it.cantidad;
+        ingresos += (p ? (p.precioVentaIVA ?? p.precioVenta ?? 0) : 0) * it.cantidad;
       });
     }
   });
