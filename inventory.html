@@ -1036,6 +1036,9 @@
                   <input type="number" id="movMonto" class="form-control" placeholder="0" min="0" step="1" oninput="actualizarMontoInfo()">
                 </div>
                 <div class="monto-info" id="montoInfo"></div>
+                <div id="montoSugerido" style="display:none;margin-top:6px;font-size:.8rem;color:var(--text-muted)">
+                  Sugerido — Costo+IVA: <strong id="sugeridoCosto">—</strong> &nbsp;·&nbsp; Venta+IVA: <strong id="sugeridoVenta">—</strong>
+                </div>
               </div>
             </div>
 
@@ -2063,6 +2066,7 @@ function renderFormMovimiento() {
       </div>` : ''}
     </div>`;
   }).join('');
+  if (esVenta) actualizarMontoSugerido();
 }
 
 function actualizarItemMov(idx, campo, valor) {
@@ -2082,6 +2086,7 @@ function actualizarItemMov(idx, campo, valor) {
       }
     }
   }
+  if (formMov.tipo === 'VENTA') actualizarMontoSugerido();
   if (campo === 'productoId' && formMov.tipo === 'COMPRA') {
     const p = state.productos.find(x => x.id === valor);
     formMov.items[idx].costo = p?.precioCosto ?? null;
@@ -2448,6 +2453,31 @@ function cargarDatosEjemplo() {
 }
 
 // ======================== MONTO COBRADO ========================
+function actualizarMontoSugerido() {
+  const el = document.getElementById('montoSugerido');
+  if (!el || formMov.tipo !== 'VENTA') return;
+  document.querySelectorAll('#itemsList .mov-item-row').forEach((row, i) => {
+    const sel = row.querySelector('select');
+    const inp = row.querySelector('input[type="number"]');
+    if (sel && formMov.items[i]) formMov.items[i].productoId = sel.value;
+    if (inp && formMov.items[i]) formMov.items[i].cantidad = parseInt(inp.value) || 0;
+  });
+  let totalCosto = 0, totalVenta = 0;
+  formMov.items.forEach(it => {
+    const p = state.productos.find(x => x.id === it.productoId);
+    if (!p) return;
+    const cant = it.cantidad || 0;
+    totalCosto += (p.precioCostoIVA ?? Math.round((p.precioCosto || 0) * 1.19)) * cant;
+    totalVenta += (p.precioVentaIVA ?? p.precioVenta ?? 0) * cant;
+  });
+  const hasItems = formMov.items.some(it => it.productoId);
+  el.style.display = hasItems ? '' : 'none';
+  if (hasItems) {
+    document.getElementById('sugeridoCosto').textContent = totalCosto ? formatearMoneda(totalCosto) : '—';
+    document.getElementById('sugeridoVenta').textContent = totalVenta ? formatearMoneda(totalVenta) : '—';
+  }
+}
+
 function actualizarMontoInfo() {
   const monto = parseFloat(document.getElementById('movMonto').value) || 0;
   const info = document.getElementById('montoInfo');
