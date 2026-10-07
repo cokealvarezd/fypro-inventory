@@ -445,6 +445,8 @@
     }
     .mov-item-row.con-costo { grid-template-columns: 1fr 72px 130px 36px; }
     .mov-item-row select, .mov-item-row input { background: var(--surface); }
+    .item-precios { display:flex; gap:16px; padding:2px 6px 4px; font-size:.77rem; color:var(--text-muted); }
+    .item-precios strong { color:var(--text); font-weight:600; }
     .remove-item-btn {
       width: 32px; height: 32px;
       border-radius: var(--radius-sm);
@@ -2033,29 +2035,53 @@ function renderFormMovimiento() {
     const costoDefault = item.costo != null
       ? item.costo
       : (activos.find(p => p.id === item.productoId)?.precioCosto ?? '');
+    const prod = item.productoId ? activos.find(p => p.id === item.productoId) : null;
+    const costoIVA = prod ? (prod.precioCostoIVA ?? Math.round((prod.precioCosto || 0) * 1.19)) : 0;
+    const ventaIVA = prod ? (prod.precioVentaIVA ?? prod.precioVenta ?? 0) : 0;
     return `
-    <div class="mov-item-row${esCompra ? ' con-costo' : ''}" data-index="${i}">
-      <select class="form-control" onchange="actualizarItemMov(${i},'productoId',this.value)">
-        <option value="">— Seleccionar producto —</option>
-        ${activos.map(p => `<option value="${escapeHtml(p.id)}" ${p.id === item.productoId ? 'selected' : ''}>${escapeHtml(p.marca)} ${escapeHtml(p.nombre)}</option>`).join('')}
-      </select>
-      <input type="number" class="form-control" value="${item.cantidad}" min="1" step="1"
-        placeholder="Cant." onchange="actualizarItemMov(${i},'cantidad',parseInt(this.value)||1)">
-      ${esCompra ? `<div class="input-prefix">
-        <span>$</span>
-        <input type="number" class="form-control costo-neto" id="costo-${i}" value="${costoDefault}"
-          min="0" step="1" placeholder="Costo neto"
-          onchange="actualizarItemMov(${i},'costo',parseFloat(this.value)||null)">
+    <div data-index="${i}">
+      <div class="mov-item-row${esCompra ? ' con-costo' : ''}">
+        <select class="form-control" onchange="actualizarItemMov(${i},'productoId',this.value)">
+          <option value="">— Seleccionar producto —</option>
+          ${activos.map(p => `<option value="${escapeHtml(p.id)}" ${p.id === item.productoId ? 'selected' : ''}>${escapeHtml(p.marca)} ${escapeHtml(p.nombre)}</option>`).join('')}
+        </select>
+        <input type="number" class="form-control" value="${item.cantidad}" min="1" step="1"
+          placeholder="Cant." onchange="actualizarItemMov(${i},'cantidad',parseInt(this.value)||1)">
+        ${esCompra ? `<div class="input-prefix">
+          <span>$</span>
+          <input type="number" class="form-control costo-neto" id="costo-${i}" value="${costoDefault}"
+            min="0" step="1" placeholder="Costo neto"
+            onchange="actualizarItemMov(${i},'costo',parseFloat(this.value)||null)">
+        </div>` : ''}
+        <button type="button" class="remove-item-btn" onclick="removerItemMov(${i})" title="Quitar">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
+        </button>
+      </div>
+      ${esVenta ? `<div class="item-precios" id="precios-${i}" ${!prod ? 'style="display:none"' : ''}>
+        <span>Costo+IVA: <strong id="precios-costo-${i}">${costoIVA ? formatearMoneda(costoIVA) : '—'}</strong></span>
+        <span>Venta+IVA: <strong id="precios-venta-${i}">${ventaIVA ? formatearMoneda(ventaIVA) : '—'}</strong></span>
       </div>` : ''}
-      <button type="button" class="remove-item-btn" onclick="removerItemMov(${i})" title="Quitar">
-        <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
-      </button>
     </div>`;
   }).join('');
 }
 
 function actualizarItemMov(idx, campo, valor) {
   formMov.items[idx][campo] = valor;
+  if (campo === 'productoId' && formMov.tipo === 'VENTA') {
+    const p = state.productos.find(x => x.id === valor);
+    const preciosEl = document.getElementById('precios-' + idx);
+    if (preciosEl) {
+      if (p) {
+        const costoIVA = p.precioCostoIVA ?? Math.round((p.precioCosto || 0) * 1.19);
+        const ventaIVA = p.precioVentaIVA ?? p.precioVenta ?? 0;
+        document.getElementById('precios-costo-' + idx).textContent = costoIVA ? formatearMoneda(costoIVA) : '—';
+        document.getElementById('precios-venta-' + idx).textContent = ventaIVA ? formatearMoneda(ventaIVA) : '—';
+        preciosEl.style.display = '';
+      } else {
+        preciosEl.style.display = 'none';
+      }
+    }
+  }
   if (campo === 'productoId' && formMov.tipo === 'COMPRA') {
     const p = state.productos.find(x => x.id === valor);
     formMov.items[idx].costo = p?.precioCosto ?? null;
