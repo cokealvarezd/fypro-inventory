@@ -447,6 +447,9 @@
     .mov-item-row select, .mov-item-row input { background: var(--surface); }
     .item-precios { display:flex; gap:16px; padding:2px 6px 4px; font-size:.77rem; color:var(--text-muted); }
     .item-precios strong { color:var(--text); font-weight:600; }
+    .hist-action-btn { background:none; border:1px solid var(--border); border-radius:6px; padding:4px 6px; cursor:pointer; color:var(--text-muted); display:inline-flex; align-items:center; transition:all .15s; margin-left:3px; }
+    .hist-action-btn:hover { background:var(--surface-hover); color:var(--text); border-color:var(--border-focus); }
+    .hist-action-del:hover { background:#fff0f0; color:#c00; border-color:#ffb3b3; }
     .remove-item-btn {
       width: 32px; height: 32px;
       border-radius: var(--radius-sm);
@@ -1042,9 +1045,14 @@
               </div>
             </div>
 
-            <button type="submit" class="btn btn-primary" style="width:100%;margin-top:16px" onclick="guardarMovimiento()">
-              Guardar movimiento
-            </button>
+            <div style="display:flex;gap:8px;margin-top:16px">
+              <button type="submit" class="btn btn-primary" style="flex:1" onclick="guardarMovimiento()" id="btnGuardarMov">
+                Guardar movimiento
+              </button>
+              <button type="button" class="btn btn-secondary" id="btnCancelarEdit" style="display:none" onclick="resetFormMov();renderFormMovimiento()">
+                Cancelar
+              </button>
+            </div>
           </form>
         </div>
       </div>
@@ -1104,10 +1112,11 @@
                 <th>Productos</th>
                 <th>Comentario</th>
                 <th class="num">Monto</th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="histTableBody">
-              <tr><td colspan="6"><div class="empty-state"><p>No hay movimientos registrados.</p></div></td></tr>
+              <tr><td colspan="7"><div class="empty-state"><p>No hay movimientos registrados.</p></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -1992,6 +2001,34 @@ function resetFormMov() {
   formMov.comentario = '';
   formMov.montoTotal = null;
   formMov.items = [{ productoId: '', cantidad: 1 }];
+  formMov.editandoId = null;
+}
+
+function editarMovimiento(id) {
+  const mov = state.movimientos.find(m => m.id === id);
+  if (!mov) return;
+  formMov.editandoId = id;
+  formMov.tipo = mov.tipo;
+  formMov.ubicacion = mov.ubicacion;
+  formMov.ubicacionDestino = mov.ubicacionDestino || 'TINYSHOP';
+  formMov.fecha = mov.fecha;
+  formMov.comentario = mov.comentario;
+  formMov.montoTotal = mov.montoTotal || null;
+  formMov.items = mov.items.map(it => ({ ...it }));
+  navegarA('movimiento');
+}
+
+function eliminarMovimiento(id) {
+  const mov = state.movimientos.find(m => m.id === id);
+  if (!mov) return;
+  const desc = `${mov.tipo} del ${formatearFecha(mov.fecha)} — ${mov.comentario}`;
+  if (!confirm(`¿Eliminar este movimiento?\n\n${desc}\n\nEsta acción no se puede deshacer.`)) return;
+  state.movimientos = state.movimientos.filter(m => m.id !== id);
+  guardarDatos();
+  if (db) db.collection('movimientos').doc(id).delete().catch(() => {});
+  renderHistorial();
+  renderVista(state.vistaActual);
+  toast('Movimiento eliminado', 'success');
 }
 
 function renderFormMovimiento() {
@@ -2001,6 +2038,13 @@ function renderFormMovimiento() {
   document.getElementById('movComentario').value = formMov.comentario;
   const montoEl = document.getElementById('movMonto');
   if (montoEl) montoEl.value = formMov.montoTotal || '';
+
+  // Botones modo edición
+  const editando = !!formMov.editandoId;
+  const btnGuardar = document.getElementById('btnGuardarMov');
+  const btnCancelar = document.getElementById('btnCancelarEdit');
+  if (btnGuardar) btnGuardar.textContent = editando ? 'Guardar cambios' : 'Guardar movimiento';
+  if (btnCancelar) btnCancelar.style.display = editando ? '' : 'none';
 
   // Tipo buttons
   document.querySelectorAll('#tipoSegmented .seg-btn').forEach(btn => {
@@ -2165,26 +2209,12 @@ function guardarMovimiento() {
 
   const montoInput = parseFloat(document.getElementById('movMonto').value) || formMov.montoTotal || null;
 
-  // Clean items: include costo only for COMPRAs
   const cleanItems = validItems.map(it => {
     const item = { productoId: it.productoId, cantidad: it.cantidad };
     if (formMov.tipo === 'COMPRA' && it.costo != null) item.costo = it.costo;
     return item;
   });
 
-  const mov = {
-    id: generarId('mov'),
-    tipo: formMov.tipo,
-    ubicacion: formMov.ubicacion,
-    ...(formMov.tipo === 'TRASLADO' && { ubicacionDestino: formMov.ubicacionDestino }),
-    ...(formMov.tipo === 'VENTA' && montoInput && { montoTotal: montoInput }),
-    fecha: formMov.fecha || hoy(),
-    comentario: formMov.comentario,
-    items: cleanItems,
-    creadoEn: Date.now()
-  };
-
-  // Actualizar precioCosto del catálogo con el costo real de esta compra
   if (formMov.tipo === 'COMPRA') {
     cleanItems.forEach(it => {
       if (!it.costo) return;
@@ -2197,6 +2227,46 @@ function guardarMovimiento() {
         .catch(() => {});
     });
   }
+
+  if (formMov.editandoId) {
+    // Modo edición: reemplazar movimiento existente
+    const idx = state.movimientos.findIndex(m => m.id === formMov.editandoId);
+    if (idx === -1) { toast('Movimiento no encontrado', 'error'); return; }
+    const original = state.movimientos[idx];
+    const mov = {
+      ...original,
+      tipo: formMov.tipo,
+      ubicacion: formMov.ubicacion,
+      ...(formMov.tipo === 'TRASLADO' ? { ubicacionDestino: formMov.ubicacionDestino } : { ubicacionDestino: null }),
+      ...(formMov.tipo === 'VENTA' && montoInput ? { montoTotal: montoInput } : { montoTotal: null }),
+      fecha: formMov.fecha || hoy(),
+      comentario: formMov.comentario,
+      items: cleanItems,
+    };
+    state.movimientos[idx] = mov;
+    guardarDatos();
+    if (db) {
+      db.collection('movimientos').doc(mov.id).set(mov).catch(() => {});
+      sincronizarStockFirestore(mov.items.map(i => i.productoId));
+    }
+    resetFormMov();
+    renderFormMovimiento();
+    toast('Movimiento actualizado correctamente', 'success');
+    return;
+  }
+
+  // Modo creación
+  const mov = {
+    id: generarId('mov'),
+    tipo: formMov.tipo,
+    ubicacion: formMov.ubicacion,
+    ...(formMov.tipo === 'TRASLADO' && { ubicacionDestino: formMov.ubicacionDestino }),
+    ...(formMov.tipo === 'VENTA' && montoInput && { montoTotal: montoInput }),
+    fecha: formMov.fecha || hoy(),
+    comentario: formMov.comentario,
+    items: cleanItems,
+    creadoEn: Date.now()
+  };
 
   state.movimientos.unshift(mov);
   if (db) {
@@ -2238,7 +2308,7 @@ function renderHistorial() {
 
   const tbody = document.getElementById('histTableBody');
   if (movs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><h3>Sin movimientos</h3><p>No hay movimientos que coincidan con los filtros.</p></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><h3>Sin movimientos</h3><p>No hay movimientos que coincidan con los filtros.</p></div></td></tr>';
     return;
   }
 
@@ -2285,6 +2355,14 @@ function renderHistorial() {
       <td><div class="hist-items">${itemsText}</div></td>
       <td style="font-size:.85rem;max-width:220px;color:var(--text-muted)">${escapeHtml(m.comentario)}</td>
       <td class="num" style="font-size:.83rem">${montoCell}</td>
+      <td style="white-space:nowrap">
+        <button class="hist-action-btn" onclick="editarMovimiento('${escapeHtml(m.id)}')" title="Editar">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>
+        </button>
+        <button class="hist-action-btn hist-action-del" onclick="eliminarMovimiento('${escapeHtml(m.id)}')" title="Eliminar">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+        </button>
+      </td>
     </tr>`;
   }).join('');
 }
