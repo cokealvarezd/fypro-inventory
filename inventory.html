@@ -2346,6 +2346,16 @@ function renderHistorial() {
         }, 0);
         montoCell = calc ? `<span style="color:var(--text-muted);font-size:.8rem">${formatearMoneda(calc)}</span>` : '—';
       }
+    } else if (m.tipo === 'COMPRA') {
+      if (m.montoTotal) {
+        montoCell = `<span style="color:var(--text-muted);font-weight:600">${formatearMoneda(m.montoTotal)}</span>`;
+      } else {
+        const calc = m.items.reduce((s, it) => {
+          const costo = it.costo ?? state.productos.find(x => x.id === it.productoId)?.precioCosto ?? 0;
+          return s + costo * it.cantidad;
+        }, 0);
+        montoCell = calc ? `<span style="color:var(--text-muted);font-size:.8rem">${formatearMoneda(calc)}</span>` : '—';
+      }
     }
 
     return `<tr>
